@@ -84,8 +84,10 @@ app.listen(PORT, () => console.log(`🚀 الويب ولوحة التحكم تع
 // -------------------------------------------------------------
 // كود وبوت الديسكورد الذكي والمربوط بالـ Dashboard
 // -------------------------------------------------------------
-const { GoogleGenAI } = require('@google/genai');
+// استخدام المكتبة الرسمية المستقرة لـ Gemini والمتوافقة 100% مع سيرفر راندر
+const { GoogleGenAI } = require('@google/generative-ai');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
 
 const client = new Client({
     intents: [
