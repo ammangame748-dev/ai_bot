@@ -1,4 +1,8 @@
 const { Client, GatewayIntentBits, AttachmentBuilder } = require('discord.js');
+const express = require('express');
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+const app = express();
 const axios = require('axios');
 const Jsoning = require('jsoning');
 const FormData = require('form-data');
@@ -107,9 +111,10 @@ client.on('messageCreate', async (message) => {
                 });
 
                 const base64 = res.generatedImages?.[0]?.image?.imageBytes;
-                if (!base64) throw new Error('No image returned');
 
-                const buffer = Buffer.from(base64, 'base64');
+if (!base64) {
+    throw new Error("No image returned from Gemini");
+}
 
                 await message.channel.send({
                     files: [new AttachmentBuilder(buffer, { name: 'image.jpg' })]
@@ -203,12 +208,16 @@ client.on('messageCreate', async (message) => {
         // 3. AI CHAT
         // =====================================================
         if (currentChannelId === aiChannel) {
-            if (!content) return;
+            if (!content || content.length < 2) return;
 
             const res = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: content
-            });
+    model: 'gemini-2.5-flash',
+    contents: content
+});
+
+const reply = res.text || "No response";
+
+await message.reply(reply);
 
             await message.reply(res.text);
         }
