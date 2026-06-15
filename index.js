@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, AttachmentBuilder } = require('discord.js');
 const express = require('express');
 const axios = require('axios');
 const Jsoning = require('jsoning');
-const FormData = require('form-data'); // تم إضافتها لإصلاح كود remove.bg
+const FormData = require('form-data');
 
 const app = express();
 const db = new Jsoning('database.json'); 
@@ -112,7 +112,7 @@ client.on('messageCreate', async (message) => {
     const aiChannel = await db.get('ai_channel');
 
     // 1. ميزة تحميل الفيديوهات
-    if (currentChannelId === downloadChannel) {
+    if (downloadChannel && currentChannelId === downloadChannel) {
         if (content.includes('tiktok.com') || content.includes('instagram.com') || content.includes('twitter.com') || content.includes('x.com')) {
             await message.channel.sendTyping();
             const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -123,11 +123,16 @@ client.on('messageCreate', async (message) => {
             const waitingMessage = await message.reply('⏳ **جاري سحب الفيديو بجودة عالية، انتظرني يا وحش...**');
 
             try {
-                const response = await axios.post('https://cobalt.tools', {
+                // تعديل: استخدام Endpoint العام والبديل المستقر المفتوح لـ Cobalt لمنع خطأ 405
+                const response = await axios.post('https://wuk.sh', {
                     url: targetUrl,
                     vQuality: '720'
                 }, {
-                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+                    headers: { 
+                        'Accept': 'application/json', 
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                    }
                 });
 
                 if (response.data && response.data.url) {
@@ -146,9 +151,10 @@ client.on('messageCreate', async (message) => {
                 console.error(error);
                 await waitingMessage.edit('❌ **عذراً يا وحش! فشلت في سحب الفيديو، تأكد أن الحساب عام أو حاول مجدداً لاحقاً.**').catch(() => null);
             }
+            return;
         }
-        return;
     }
+
     // 2. ميزات الصور (فقط إذا كانت الرسالة في الروم المحدد بالبطاقة الثانية)
     if (currentChannelId === artChannel) {
         if (content.startsWith('ارسم') || content.startsWith('صمم صوره') || content.startsWith('تخيل')) {
