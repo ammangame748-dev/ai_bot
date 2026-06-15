@@ -1,15 +1,16 @@
-const { Client, GatewayIntentBits, AttachmentBuilder } = require('discord.js');
 const express = require('express');
 const app = express();
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+
+const { Client, GatewayIntentBits, AttachmentBuilder } = require('discord.js');
 const axios = require('axios');
 const Jsoning = require('jsoning');
 const FormData = require('form-data');
 const { GoogleGenAI } = require('@google/genai');
 
 const db = new Jsoning('database.json');
-
 const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY
 });
