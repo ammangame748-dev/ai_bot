@@ -53,23 +53,33 @@ client.on('messageCreate', async (message) => {
 
             const waiting = await message.reply('⏳ جاري تحميل الفيديو...');
 
+            // استخدام سيرفر بديل لـ Cobalt مع إضافة مهلة زمنية 20 ثانية لمنع التعليق
             const response = await axios.post(
-                'https://api.cobalt.tools/api/json',
+                'https://unblockit.pro', 
                 { url: targetUrl },
                 {
                     headers: {
                         Accept: 'application/json',
                         'Content-Type': 'application/json'
-                    }
+                    },
+                    timeout: 20000 
                 }
-            );
+            ).catch(async () => {
+                // محاولة أخرى بسيرفر احتياطي إذا فشل الأول
+                return await axios.post('https://api.cobalt.tools/api/json', { url: targetUrl }, {
+                    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+                    timeout: 10000
+                });
+            });
 
-            if (!response.data || !response.data.url) {
-                throw new Error('No video url returned');
+            if (!response || !response.data || !response.data.url) {
+                await waiting.edit('❌ عذراً، فشل سحب الفيديو. قد يكون السيرفر مضغوطاً أو الحساب خاصاً.').catch(() => {});
+                return;
             }
 
             const video = await axios.get(response.data.url, {
-                responseType: 'arraybuffer'
+                responseType: 'arraybuffer',
+                timeout: 30000
             });
 
             const file = new AttachmentBuilder(Buffer.from(video.data), {
@@ -81,6 +91,7 @@ client.on('messageCreate', async (message) => {
 
             return;
         }
+
 
         // =====================================================
         // 2. IMAGE GENERATION + EDIT + REMOVE BG
@@ -96,37 +107,25 @@ client.on('messageCreate', async (message) => {
                 content.startsWith('صمم صوره')
             ) {
                 const prompt = content.replace(/(ارسم|تخيل|صمم صوره)/, '').trim();
-                if (!prompt) return message.reply('❌ اكتب وصف للصورة');
+                if (!prompt) return message.reply('❌ اكتب وصف للصورة التي تريد رسمها');
 
-                const waiting = await message.reply('🎨 جاري توليد الصورة...');
+                const waiting = await message.reply('🎨 جاري رسم وتوليد الصورة الآن...');
 
-                const res = await ai.models.generateImages({
-                    model: 'imagen-3.0-generate-002',
-                    prompt,
-                    config: {
-                        numberOfImages: 1,
-                        outputMimeType: 'image/jpeg',
-                        aspectRatio: '1:1'
-                    }
+                // استخدام نظام Pollinations السريع والمجاني لإنشاء الصور بدون ليميت
+                const encodedPrompt = encodeURIComponent(prompt);
+                const imageUrl = `https://image.pollinations.ai/p/{encodedPrompt}?width=1024&height=1024&seed=${Math.floor(Math.random() * 100000)}`;
+
+                const imageRes = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+                const imgBuffer = Buffer.from(imageRes.data);
+
+                await message.channel.send({
+                    files: [new AttachmentBuilder(imgBuffer, { name: 'generated_image.jpg' })]
                 });
-
-               const base64 = res.generatedImages?.[0]?.image?.imageBytes;
-
-if (!base64) {
-    throw new Error("No image returned from Gemini");
-}
-
-// هنا قمنا بتعريف الـ buffer بشكل صحيح وتحويل الـ base64 إليه
-const imgBuffer = Buffer.from(base64, 'base64');
-
-await message.channel.send({
-    files: [new AttachmentBuilder(imgBuffer, { name: 'image.jpg' })]
-});
-
 
                 await waiting.delete().catch(() => {});
                 return;
             }
+
 
             // -------- must have image
             if (!attachedImage) return;
