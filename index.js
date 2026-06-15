@@ -87,7 +87,7 @@ app.listen(PORT, () => console.log(`🚀 الويب ولوحة التحكم تع
 // كود وبوت الديسكورد الذكي والمربوط بالـ Dashboard
 // -------------------------------------------------------------
 const { GoogleGenAI } = require('@google/genai');
-const ai = new GoogleGenAI();
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const client = new Client({
     intents: [
