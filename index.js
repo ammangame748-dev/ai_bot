@@ -8,12 +8,12 @@ const { Client, GatewayIntentBits, AttachmentBuilder } = require('discord.js');
 const axios = require('axios');
 const Jsoning = require('jsoning');
 const FormData = require('form-data');
-const { GoogleGenAI } = require('@google/genai');
+const Groq = require('groq-sdk');
 
 const db = new Jsoning('database.json');
-const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY
-});
+const Groq = require('groq-sdk');
+const ai = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
 
 const client = new Client({
     intents: [
@@ -214,15 +214,23 @@ await message.channel.send({
         // =====================================================
         if (currentChannelId === aiChannel) {
             if (!content || content.length < 2) return;
-const res = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: [{ role: 'user', parts: [{ text: content }] }] // تعديل الصيغة هنا
-});
 
-const reply = res.text || "No response";
+            try {
+                // تفعيل ميزة إظهار البوت وهو يكتب في القناة فوراً
+                await message.channel.sendTyping();
 
-await message.reply(reply); // تكتفي برسم رد واحد فقط وحذفنا السطر المكرر
+                const res = await ai.chat.completions.create({
+                    model: "llama-3.3-70b-versatile",
+                    messages: [{ role: "user", content: content }]
+                });
 
+                const reply = res.choices?.[0]?.message?.content || "لم أستطع فهم ذلك";
+
+                await message.reply(reply);
+            } catch (chatErr) {
+                console.error('AI Chat Error:', chatErr);
+                await message.reply('❌ عذراً، واجهت مشكلة في الاتصال بسيرفر الذكاء الاصطناعي.');
+            }
         }
 
     } catch (err) {
