@@ -111,15 +111,19 @@ client.on('messageCreate', async (message) => {
                     }
                 });
 
-                const base64 = res.generatedImages?.[0]?.image?.imageBytes;
+               const base64 = res.generatedImages?.[0]?.image?.imageBytes;
 
 if (!base64) {
     throw new Error("No image returned from Gemini");
 }
 
-                await message.channel.send({
-                    files: [new AttachmentBuilder(buffer, { name: 'image.jpg' })]
-                });
+// هنا قمنا بتعريف الـ buffer بشكل صحيح وتحويل الـ base64 إليه
+const imgBuffer = Buffer.from(base64, 'base64');
+
+await message.channel.send({
+    files: [new AttachmentBuilder(imgBuffer, { name: 'image.jpg' })]
+});
+
 
                 await waiting.delete().catch(() => {});
                 return;
@@ -210,17 +214,15 @@ if (!base64) {
         // =====================================================
         if (currentChannelId === aiChannel) {
             if (!content || content.length < 2) return;
-
-            const res = await ai.models.generateContent({
+const res = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
-    contents: content
+    contents: [{ role: 'user', parts: [{ text: content }] }] // تعديل الصيغة هنا
 });
 
 const reply = res.text || "No response";
 
-await message.reply(reply);
+await message.reply(reply); // تكتفي برسم رد واحد فقط وحذفنا السطر المكرر
 
-            await message.reply(res.text);
         }
 
     } catch (err) {
