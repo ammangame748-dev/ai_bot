@@ -233,16 +233,97 @@ await message.reply(reply); // تكتفي برسم رد واحد فقط وحذف
 
 // ---------------- LOGIN ----------------
 client.login(process.env.DISCORD_TOKEN);
-app.get('/', (req, res) => {
+// ---------------- DASHBOARD & WEB SERVER ----------------
+app.get('/', async (req, res) => {
+    // جلب قيم الغرف الحالية من قاعدة البيانات لعرضها داخل البطاقات
+    const downloadChannel = await db.get('download_channel') || 'لم يتم التحديد بعد';
+    const artChannel = await db.get('art_channel') || 'لم يتم التحديد بعد';
+    const aiChannel = await db.get('ai_channel') || 'لم يتم التحديد بعد';
+
     res.send(`
-        <h1 style="text-align:center;margin-top:50px;">
-            🤖 Bot is Running Successfully
-        </h1>
-        <p style="text-align:center;">
-            Dashboard / API is active
-        </p>
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>لوحة تحكم البوت الذكي</title>
+        <!-- استدعاء مكتبة التصميم Tailwind CSS -->
+        <script src="https://tailwindcss.com"></script>
+        <link href="https://googleapis.com" rel="stylesheet">
+        <style>
+            body { font-family: 'Tajawal', sans-serif; }
+        </style>
+    </head>
+    <body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col justify-between">
+
+        <!-- الهيدر أو الرأسية -->
+        <header class="bg-gray-800 border-b border-gray-700 p-5 text-center shadow-lg">
+            <h1 class="text-3xl font-bold text-indigo-400 flex justify-center items-center gap-3">
+                🤖 لوحة تحكم البوت الذكي
+            </h1>
+            <p class="text-gray-400 mt-2 text-sm">البوت يعمل بنجاح ومربوط بسيرفر الديسكورد الخاص بك</p>
+        </header>
+
+        <!-- المحتوى الرئيسي المحتوي على البطاقات الثلاث -->
+        <main class="max-w-6xl mx-auto p-6 my-auto w-full grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <!-- 1. بطاقة الأسئلة والشات (AI Chat) -->
+            <div class="bg-gray-800 border border-gray-700 rounded-2xl p-6 shadow-xl flex flex-col justify-between transform hover:scale-105 transition-all duration-300">
+                <div>
+                    <div class="text-4xl mb-4 text-center">💬</div>
+                    <h2 class="text-xl font-bold text-center text-indigo-300 mb-3">نظام الأسئلة والمحادثة</h2>
+                    <p class="text-gray-400 text-sm text-center leading-relaxed">
+                        بطاقة مخصصة للرد الذكي والآلي على أسئلة الأعضاء، الاستفسارات، وتوليد النصوص والنقاشات الطويلة بناءً على نموذج Gemini-2.5.
+                    </p>
+                </div>
+                <div class="mt-6 pt-4 border-t border-gray-700 text-xs text-center text-gray-500">
+                    <span class="block font-semibold text-gray-400 mb-1">ID غرفة الشات الحالية:</span>
+                    <code class="bg-gray-900 text-indigo-400 px-2 py-1 rounded select-all font-mono">${aiChannel}</code>
+                </div>
+            </div>
+
+            <!-- 2. بطاقة الفنون والصور (Art & Image Generation) -->
+            <div class="bg-gray-800 border border-gray-700 rounded-2xl p-6 shadow-xl flex flex-col justify-between transform hover:scale-105 transition-all duration-300">
+                <div>
+                    <div class="text-4xl mb-4 text-center">🎨</div>
+                    <h2 class="text-xl font-bold text-center text-indigo-300 mb-3">إنشاء وتعديل الصور</h2>
+                    <p class="text-gray-400 text-sm text-center leading-relaxed">
+                        تتيح للأعضاء إنشاء صور إبداعية من النصوص بـ Imagen 3، إزالة خلفيات الصور تلقائياً بلمسة واحدة، وتحسين وتحليل الصور عبر الذكاء الاصطناعي.
+                    </p>
+                </div>
+                <div class="mt-6 pt-4 border-t border-gray-700 text-xs text-center text-gray-500">
+                    <span class="block font-semibold text-gray-400 mb-1">ID غرفة الصور الحالية:</span>
+                    <code class="bg-gray-900 text-indigo-400 px-2 py-1 rounded select-all font-mono">${artChannel}</code>
+                </div>
+            </div>
+
+            <!-- 3. بطاقة تحميل الفيديوهات (Video Downloader) -->
+            <div class="bg-gray-800 border border-gray-700 rounded-2xl p-6 shadow-xl flex flex-col justify-between transform hover:scale-105 transition-all duration-300">
+                <div>
+                    <div class="text-4xl mb-4 text-center">📥</div>
+                    <h2 class="text-xl font-bold text-center text-indigo-300 mb-3">جلب وتحميل الفيديوهات</h2>
+                    <p class="text-gray-400 text-sm text-center leading-relaxed">
+                        تسمح بسحب وتحميل الفيديوهات مباشرة من تطبيقات التواصل الاجتماعي (إنستغرام، تويتر/X، وتيك توك) بمجرد إرسال الرابط داخل الغرفة المخصصة.
+                    </p>
+                </div>
+                <div class="mt-6 pt-4 border-t border-gray-700 text-xs text-center text-gray-500">
+                    <span class="block font-semibold text-gray-400 mb-1">ID غرفة التحميل الحالية:</span>
+                    <code class="bg-gray-900 text-indigo-400 px-2 py-1 rounded select-all font-mono">${downloadChannel}</code>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- الفوتر أو التذييل -->
+        <footer class="bg-gray-900 text-center py-4 text-xs text-gray-600 border-t border-gray-800">
+            لوحة تحكم خاصة ببوت الديسكورد الفعال • جميع الحقوق محفوظة لكم
+        </footer>
+
+    </body>
+    </html>
     `);
 });
+
 app.listen(process.env.PORT || 3000, () => {
     console.log("🌐 Server running on port", process.env.PORT || 3000);
 });
