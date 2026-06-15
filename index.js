@@ -4,7 +4,7 @@ const axios = require('axios');
 const Jsoning = require('jsoning');
 
 const app = express();
-const db = new Jsoning('database.json'); // قاعدة بيانات ملف JSON خفيفة ومضمونة 100% على Render
+const db = new Jsoning('database.json'); // قاعدة بيانات ملف JSON المضمونة والمستقرة على Render
 const PORT = process.env.PORT || 3000;
 
 app.use(express.urlencoded({ extended: true }));
@@ -72,7 +72,7 @@ app.get('/', async (req, res) => {
 
 app.post('/save', async (req, res) => {
     const { download_channel, art_channel, ai_channel } = req.body;
-
+    
     await db.set('download_channel', download_channel.trim());
     await db.set('art_channel', art_channel.trim());
     await db.set('ai_channel', ai_channel.trim());
@@ -84,10 +84,9 @@ app.listen(PORT, () => console.log(`🚀 الويب ولوحة التحكم تع
 // -------------------------------------------------------------
 // كود وبوت الديسكورد الذكي والمربوط بالـ Dashboard
 // -------------------------------------------------------------
-// استخدام المكتبة الرسمية المستقرة لـ Gemini والمتوافقة 100% مع سيرفر راندر
-const { GoogleGenAI } = require('@google/generative-ai');
+// الاستدعاء الصحيح للنسخة المستقرة والنهائية لـ Gemini
+const { GoogleGenAI } = require('@google/genai');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
 
 const client = new Client({
     intents: [
@@ -151,7 +150,7 @@ client.on('messageCreate', async (message) => {
 
     // 2. تشغيل ميزات الصور (فقط إذا كانت الرسالة في الروم المحدد بالبطاقة الثانية)
     if (currentChannelId === artChannel) {
-        // أ) توليد ورسم الصور النصية من الصفر
+        // أ) توليد ورسم الصور النصية من الصفر باستخدام نموذج Imagen الجديد
         if (content.startsWith('ارسم') || content.startsWith('صمم صوره') || content.startsWith('تخيل')) {
             await message.channel.sendTyping();
             const waitingMessage = await message.reply('🎨 **جاري تشغيل محرك الرسم وتوليد صورتك بدقة احترافية، انتظرني...**');
@@ -168,13 +167,14 @@ client.on('messageCreate', async (message) => {
                     config: { numberOfImages: 1, outputMimeType: 'image/jpeg', aspectRatio: '1:1' },
                 });
 
-                const base64Image = response.generatedImages.image.imageBytes;
+                const base64Image = response.generatedImages[0].image.imageBytes;
                 const buffer = Buffer.from(base64Image, 'base64');
                 const imageAttachment = new AttachmentBuilder(buffer, { name: 'GEMZ_Art.jpg' });
 
                 await message.channel.send({ content: `🎨 **تفضل اللوحة الفنية التي طلبتها يا وحش:**`, files: [imageAttachment] });
                 await waitingMessage.delete().catch(() => null);
             } catch (error) {
+                console.error(error);
                 await waitingMessage.edit('❌ **حدث خطأ أثناء توليد الصورة، حاول صياغة الوصف بشكل أوضح.**');
             }
             return;
@@ -183,8 +183,8 @@ client.on('messageCreate', async (message) => {
         // ب) معالجة الصور المرفوعة (إزالة خلفية أو تعديل)
         if (message.attachments.size > 0) {
             const attachedImage = message.attachments.first();
-
-            // إزالة الخلفية
+            
+            // إزالة الخلفية عبر الـ API لـ remove.bg
             if (content.includes('شيل الخلفيه') || content.includes('مسح الخلفية') || content.includes('remove background')) {
                 await message.channel.sendTyping();
                 const waitingMessage = await message.reply('✂️ **جاري معالجة الصورة وإزالة الخلفية بدقة خارقة، ثواني...**');
@@ -207,7 +207,7 @@ client.on('messageCreate', async (message) => {
                 return;
             }
 
-            // تعديل وتحسين الصورة
+            // تعديل وتحسين الصورة عبر الرؤية الذكية للـ Gemini
             if (content.includes('عدل') || content.includes('تعديل') || content.includes('احسن')) {
                 await message.channel.sendTyping();
                 const waitingMessage = await message.reply('🪄 **جاري تحليل صورتك وتعديلها وتحسين جودتها بالذكاء الاصطناعي...**');
