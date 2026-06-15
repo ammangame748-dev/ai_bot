@@ -234,8 +234,11 @@ await message.reply(reply); // تكتفي برسم رد واحد فقط وحذف
 // ---------------- LOGIN ----------------
 client.login(process.env.DISCORD_TOKEN);
 // ---------------- DASHBOARD & WEB SERVER ----------------
+// =====================================================
+// 🛠️ DASHBOARD - GET ROUTE (واجهة التحكم والبطاقات)
+// =====================================================
 app.get('/', async (req, res) => {
-    // جلب قيم الغرف الحالية من قاعدة البيانات لعرضها داخل البطاقات
+    // جلب القيم الحالية من قاعدة البيانات أو وضع نص افتراضي إذا كانت فارغة
     const downloadChannel = await db.get('download_channel') || 'لم يتم التحديد بعد';
     const artChannel = await db.get('art_channel') || 'لم يتم التحديد بعد';
     const aiChannel = await db.get('ai_channel') || 'لم يتم التحديد بعد';
@@ -247,81 +250,233 @@ app.get('/', async (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>لوحة تحكم البوت الذكي</title>
-        <!-- استدعاء مكتبة التصميم Tailwind CSS -->
-        <script src="https://tailwindcss.com"></script>
-        <link href="https://googleapis.com" rel="stylesheet">
         <style>
-            body { font-family: 'Tajawal', sans-serif; }
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #0f172a;
+                color: #f1f5f9;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+            }
+            header {
+                background-color: #1e293b;
+                border-bottom: 2px solid #334155;
+                padding: 30px 20px;
+                text-align: center;
+                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            }
+            header h1 {
+                color: #818cf8;
+                font-size: 32px;
+                margin-bottom: 10px;
+            }
+            header p {
+                color: #94a3b8;
+                font-size: 15px;
+            }
+            main {
+                max-width: 1200px;
+                width: 95%;
+                margin: 40px auto;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 30px;
+                justify-content: center;
+            }
+            .card {
+                background-color: #1e293b;
+                border: 1px solid #334155;
+                border-radius: 20px;
+                padding: 30px;
+                width: 350px;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                box-shadow: 0 15px 25px rgba(0, 0, 0, 0.4);
+                transition: transform 0.3s ease, box-shadow 0.3s ease;
+            }
+            .card:hover {
+                transform: translateY(-8px);
+                box-shadow: 0 20px 35px rgba(129, 140, 248, 0.15);
+            }
+            .card-icon {
+                font-size: 45px;
+                text-align: center;
+                margin-bottom: 20px;
+            }
+            .card-title {
+                font-size: 22px;
+                color: #c7d2fe;
+                text-align: center;
+                margin-bottom: 15px;
+                font-weight: bold;
+            }
+            .card-desc {
+                color: #94a3b8;
+                font-size: 14px;
+                text-align: center;
+                line-height: 1.7;
+                margin-bottom: 25px;
+                min-height: 70px;
+            }
+            .form-group {
+                border-top: 1px solid #334155;
+                padding-top: 20px;
+            }
+            .current-id {
+                text-align: center;
+                font-size: 13px;
+                color: #94a3b8;
+                margin-bottom: 12px;
+            }
+            .current-id code {
+                background-color: #0f172a;
+                color: #38bdf8;
+                padding: 3px 8px;
+                border-radius: 6px;
+                font-family: monospace;
+                font-size: 14px;
+                margin-right: 5px;
+            }
+            .input-field {
+                width: 100%;
+                background-color: #0f172a;
+                border: 1px solid #475569;
+                border-radius: 8px;
+                padding: 10px 12px;
+                color: #ffffff;
+                font-size: 14px;
+                text-align: center;
+                margin-bottom: 12px;
+                outline: none;
+                transition: border-color 0.2s;
+            }
+            .input-field:focus {
+                border-color: #818cf8;
+            }
+            .save-btn {
+                width: 100%;
+                background-color: #4f46e5;
+                color: #ffffff;
+                border: none;
+                border-radius: 8px;
+                padding: 11px;
+                font-size: 14px;
+                font-weight: bold;
+                cursor: pointer;
+                transition: background-color 0.2s;
+            }
+            .save-btn:hover {
+                background-color: #4338ca;
+            }
+            footer {
+                background-color: #0f172a;
+                text-align: center;
+                padding: 20px;
+                font-size: 13px;
+                color: #475569;
+                border-top: 1px solid #1e293b;
+            }
         </style>
     </head>
-    <body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col justify-between">
+    <body>
 
-        <!-- الهيدر أو الرأسية -->
-        <header class="bg-gray-800 border-b border-gray-700 p-5 text-center shadow-lg">
-            <h1 class="text-3xl font-bold text-indigo-400 flex justify-center items-center gap-3">
-                🤖 لوحة تحكم البوت الذكي
-            </h1>
-            <p class="text-gray-400 mt-2 text-sm">البوت يعمل بنجاح ومربوط بسيرفر الديسكورد الخاص بك</p>
+        <header>
+            <h1>🤖 لوحة تحكم البوت الذكي</h1>
+            <p>قم بإدارة وتحديث قنوات البوت في سيرفر الديسكورد بكل سهولة</p>
         </header>
 
-        <!-- المحتوى الرئيسي المحتوي على البطاقات الثلاث -->
-        <main class="max-w-6xl mx-auto p-6 my-auto w-full grid grid-cols-1 md:grid-cols-3 gap-6">
+        <main>
             
-            <!-- 1. بطاقة الأسئلة والشات (AI Chat) -->
-            <div class="bg-gray-800 border border-gray-700 rounded-2xl p-6 shadow-xl flex flex-col justify-between transform hover:scale-105 transition-all duration-300">
+            <!-- 1. بطاقة الأسئلة والشات -->
+            <div class="card">
                 <div>
-                    <div class="text-4xl mb-4 text-center">💬</div>
-                    <h2 class="text-xl font-bold text-center text-indigo-300 mb-3">نظام الأسئلة والمحادثة</h2>
-                    <p class="text-gray-400 text-sm text-center leading-relaxed">
-                        بطاقة مخصصة للرد الذكي والآلي على أسئلة الأعضاء، الاستفسارات، وتوليد النصوص والنقاشات الطويلة بناءً على نموذج Gemini-2.5.
-                    </p>
+                    <div class="card-icon">💬</div>
+                    <div class="card-title">نظام الأسئلة والمحادثة</div>
+                    <div class="card-desc">
+                        البطاقة المخصصة للرد الذكي والآلي على أسئلة الأعضاء وتوليد النصوص المحادثات والنقاشات الطويلة بناءً على نموذج Gemini-2.5.
+                    </div>
                 </div>
-                <div class="mt-6 pt-4 border-t border-gray-700 text-xs text-center text-gray-500">
-                    <span class="block font-semibold text-gray-400 mb-1">ID غرفة الشات الحالية:</span>
-                    <code class="bg-gray-900 text-indigo-400 px-2 py-1 rounded select-all font-mono">${aiChannel}</code>
-                </div>
+                <form action="/update-channels" method="POST" class="form-group">
+                    <div class="current-id">القناة الحالية: <code>${aiChannel}</code></div>
+                    <input type="text" name="ai_channel" class="input-field" placeholder="أدخل ID قناة الشات الجديد" required autocomplete="off">
+                    <button type="submit" class="save-btn">تحديث قناة الشات</button>
+                </form>
             </div>
 
-            <!-- 2. بطاقة الفنون والصور (Art & Image Generation) -->
-            <div class="bg-gray-800 border border-gray-700 rounded-2xl p-6 shadow-xl flex flex-col justify-between transform hover:scale-105 transition-all duration-300">
+            <!-- 2. بطاقة الفنون والصور -->
+            <div class="card">
                 <div>
-                    <div class="text-4xl mb-4 text-center">🎨</div>
-                    <h2 class="text-xl font-bold text-center text-indigo-300 mb-3">إنشاء وتعديل الصور</h2>
-                    <p class="text-gray-400 text-sm text-center leading-relaxed">
+                    <div class="card-icon">🎨</div>
+                    <div class="card-title">إنشاء وتعديل الصور</div>
+                    <div class="card-desc">
                         تتيح للأعضاء إنشاء صور إبداعية من النصوص بـ Imagen 3، إزالة خلفيات الصور تلقائياً بلمسة واحدة، وتحسين وتحليل الصور عبر الذكاء الاصطناعي.
-                    </p>
+                    </div>
                 </div>
-                <div class="mt-6 pt-4 border-t border-gray-700 text-xs text-center text-gray-500">
-                    <span class="block font-semibold text-gray-400 mb-1">ID غرفة الصور الحالية:</span>
-                    <code class="bg-gray-900 text-indigo-400 px-2 py-1 rounded select-all font-mono">${artChannel}</code>
-                </div>
+                <form action="/update-channels" method="POST" class="form-group">
+                    <div class="current-id">القناة الحالية: <code>${artChannel}</code></div>
+                    <input type="text" name="art_channel" class="input-field" placeholder="أدخل ID قناة الصور الجديد" required autocomplete="off">
+                    <button type="submit" class="save-btn">تحديث قناة الصور</button>
+                </form>
             </div>
 
-            <!-- 3. بطاقة تحميل الفيديوهات (Video Downloader) -->
-            <div class="bg-gray-800 border border-gray-700 rounded-2xl p-6 shadow-xl flex flex-col justify-between transform hover:scale-105 transition-all duration-300">
+            <!-- 3. بطاقة تحميل الفيديوهات -->
+            <div class="card">
                 <div>
-                    <div class="text-4xl mb-4 text-center">📥</div>
-                    <h2 class="text-xl font-bold text-center text-indigo-300 mb-3">جلب وتحميل الفيديوهات</h2>
-                    <p class="text-gray-400 text-sm text-center leading-relaxed">
+                    <div class="card-icon">📥</div>
+                    <div class="card-title">جلب وتحميل الفيديوهات</div>
+                    <div class="card-desc">
                         تسمح بسحب وتحميل الفيديوهات مباشرة من تطبيقات التواصل الاجتماعي (إنستغرام، تويتر/X، وتيك توك) بمجرد إرسال الرابط داخل الغرفة المخصصة.
-                    </p>
+                    </div>
                 </div>
-                <div class="mt-6 pt-4 border-t border-gray-700 text-xs text-center text-gray-500">
-                    <span class="block font-semibold text-gray-400 mb-1">ID غرفة التحميل الحالية:</span>
-                    <code class="bg-gray-900 text-indigo-400 px-2 py-1 rounded select-all font-mono">${downloadChannel}</code>
-                </div>
+                <form action="/update-channels" method="POST" class="form-group">
+                    <div class="current-id">القناة الحالية: <code>${downloadChannel}</code></div>
+                    <input type="text" name="download_channel" class="input-field" placeholder="أدخل ID قناة التحميل الجديد" required autocomplete="off">
+                    <button type="submit" class="save-btn">تحديث قناة التحميل</button>
+                </form>
             </div>
 
         </main>
 
-        <!-- الفوتر أو التذييل -->
-        <footer class="bg-gray-900 text-center py-4 text-xs text-gray-600 border-t border-gray-800">
+        <footer>
             لوحة تحكم خاصة ببوت الديسكورد الفعال • جميع الحقوق محفوظة لكم
         </footer>
 
     </body>
     </html>
     `);
+});
+
+// =====================================================
+// 📥 DASHBOARD - POST ROUTE (أمر استقبال البيانات وحفظها)
+// =====================================================
+app.post('/update-channels', async (req, res) => {
+    try {
+        const { download_channel, art_channel, ai_channel } = req.body;
+
+        // التحقق من الحقل المرسل وحفظه داخل قاعدة البيانات
+        if (download_channel) await db.set('download_channel', download_channel.trim());
+        if (art_channel) await db.set('art_channel', art_channel.trim());
+        if (ai_channel) await db.set('ai_channel', ai_channel.trim());
+
+        // إعادة توجيه المستخدم لصفحة لوحة التحكم بعد الحفظ بنجاح لتحديث البيانات
+        res.send(`
+            <script>
+                alert('✅ تم تحديث القناة وحفظ البيانات بنجاح!');
+                window.location.href = '/';
+            </script>
+        `);
+    } catch (err) {
+        console.error('Dashboard Error:', err);
+        res.status(500).send('❌ حدث خطأ أثناء محاولة حفظ البيانات');
+    }
 });
 
 app.listen(process.env.PORT || 3000, () => {
