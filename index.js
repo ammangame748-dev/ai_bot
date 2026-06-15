@@ -2,9 +2,10 @@ const { Client, GatewayIntentBits, AttachmentBuilder } = require('discord.js');
 const express = require('express');
 const axios = require('axios');
 const Jsoning = require('jsoning');
+const FormData = require('form-data'); // تم إضافتها لإصلاح كود remove.bg
 
 const app = express();
-const db = new Jsoning('database.json'); // قاعدة بيانات ملف JSON المضمونة والمستقرة على Render
+const db = new Jsoning('database.json'); 
 const PORT = process.env.PORT || 3000;
 
 app.use(express.urlencoded({ extended: true }));
@@ -81,10 +82,10 @@ app.post('/save', async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`🚀 الويب ولوحة التحكم تعمل بنجاح على منفذ: ${PORT}`));
+
 // -------------------------------------------------------------
 // كود وبوت الديسكورد الذكي والمربوط بالـ Dashboard
 // -------------------------------------------------------------
-// الاستدعاء الصحيح للنسخة المستقرة والنهائية لـ Gemini
 const { GoogleGenAI } = require('@google/genai');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -106,58 +107,57 @@ client.on('messageCreate', async (message) => {
     const content = message.content.trim();
     const currentChannelId = message.channel.id;
 
-    // جلب الرومات المحددة من لوحة التحكم قبل تنفيذ أي شيء
     const downloadChannel = await db.get('download_channel');
     const artChannel = await db.get('art_channel');
     const aiChannel = await db.get('ai_channel');
 
-    // 1. تشغيل ميزة تحميل الفيديوهات (فقط إذا كانت الرسالة في الروم المحدد بالبطاقة الأولى)
+    // 1. ميزة تحميل الفيديوهات
     if (currentChannelId === downloadChannel) {
         if (content.includes('tiktok.com') || content.includes('instagram.com') || content.includes('twitter.com') || content.includes('x.com')) {
             await message.channel.sendTyping();
             const urlRegex = /(https?:\/\/[^\s]+)/g;
             const matchedUrls = content.match(urlRegex);
             if (!matchedUrls) return;
-            const targetUrl = matchedUrls;
+            const targetUrl = matchedUrls[0]; 
 
-            const waitingMessage = await message.reply('⏳ **جاري سحب الفيديو بجودة عالية وفصله عن الخلفية، انتظرني يا وحش...**');
+            const waitingMessage = await message.reply('⏳ **جاري سحب الفيديو بجودة عالية، انتظرني يا وحش...**');
 
             try {
                 const response = await axios.post('https://cobalt.tools', {
                     url: targetUrl,
-                    vQuality: '720',
-                    filenamePattern: 'basic'
+                    vQuality: '720'
                 }, {
                     headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
                 });
 
                 if (response.data && response.data.url) {
-                    const videoAttachment = new AttachmentBuilder(response.data.url, { name: 'GEMZ_Video.mp4' });
+                    const videoStream = await axios.get(response.data.url, { responseType: 'arraybuffer' });
+                    const videoAttachment = new AttachmentBuilder(Buffer.from(videoStream.data), { name: 'GEMZ_Video.mp4' });
+                    
                     await message.channel.send({
                         content: `🎬 **تفضل الفيديو الخاص بك يا وحش:**`,
                         files: [videoAttachment]
                     });
                     await waitingMessage.delete().catch(() => null);
                 } else {
-                    throw new Error();
+                    throw new Error('No URL found');
                 }
             } catch (error) {
-                await waitingMessage.edit('❌ **عذراً يا وحش! فشلت في سحب الفيديو، تأكد أن الحساب عام وليس خاصاً أو حاول مجدداً.**');
+                console.error(error);
+                await waitingMessage.edit('❌ **عذراً يا وحش! فشلت في سحب الفيديو، تأكد أن الحساب عام أو حاول مجدداً لاحقاً.**').catch(() => null);
             }
         }
         return;
     }
-
-    // 2. تشغيل ميزات الصور (فقط إذا كانت الرسالة في الروم المحدد بالبطاقة الثانية)
+    // 2. ميزات الصور (فقط إذا كانت الرسالة في الروم المحدد بالبطاقة الثانية)
     if (currentChannelId === artChannel) {
-        // أ) توليد ورسم الصور النصية من الصفر باستخدام نموذج Imagen الجديد
         if (content.startsWith('ارسم') || content.startsWith('صمم صوره') || content.startsWith('تخيل')) {
             await message.channel.sendTyping();
             const waitingMessage = await message.reply('🎨 **جاري تشغيل محرك الرسم وتوليد صورتك بدقة احترافية، انتظرني...**');
 
             const prompt = content.replace(/(ارسم|صمم صوره|تخيل)/, '').trim();
             if (!prompt) {
-                return waitingMessage.edit('❌ **اكتب لي وصفاً للصورة يا وحش (مثال: ارسم رائد فضاء يركب خيل في الفضاء).**');
+                return waitingMessage.edit('❌ **اكتب لي وصفاً للصورة يا وحش (مثال: ارسم رائد فضاء).**');
             }
 
             try {
@@ -167,7 +167,7 @@ client.on('messageCreate', async (message) => {
                     config: { numberOfImages: 1, outputMimeType: 'image/jpeg', aspectRatio: '1:1' },
                 });
 
-                const base64Image = response.generatedImages.image.imageBytes;
+                const base64Image = response.generatedImages.image.imageBytes; 
                 const buffer = Buffer.from(base64Image, 'base64');
                 const imageAttachment = new AttachmentBuilder(buffer, { name: 'GEMZ_Art.jpg' });
 
@@ -175,26 +175,28 @@ client.on('messageCreate', async (message) => {
                 await waitingMessage.delete().catch(() => null);
             } catch (error) {
                 console.error(error);
-                await waitingMessage.edit('❌ **حدث خطأ أثناء توليد الصورة، حاول صياغة الوصف بشكل أوضح.**');
+                await waitingMessage.edit('❌ **حدث خطأ أثناء توليد الصورة، حاول صياغة الوصف بشكل أوضح وبدون كلمات محظورة.**');
             }
             return;
         }
 
-        // ب) معالجة الصور المرفوعة (إزالة خلفية أو تعديل)
         if (message.attachments.size > 0) {
             const attachedImage = message.attachments.first();
             
-            // إزالة الخلفية عبر الـ API لـ remove.bg
             if (content.includes('شيل الخلفيه') || content.includes('مسح الخلفية') || content.includes('remove background')) {
                 await message.channel.sendTyping();
                 const waitingMessage = await message.reply('✂️ **جاري معالجة الصورة وإزالة الخلفية بدقة خارقة، ثواني...**');
 
                 try {
-                    const response = await axios.post('https://remove.bg', {
-                        image_url: attachedImage.url,
-                        size: 'auto'
-                    }, {
-                        headers: { 'X-API-Key': process.env.REMOVE_BG_KEY },
+                    const formData = new FormData();
+                    formData.append('image_url', attachedImage.url);
+                    formData.append('size', 'auto');
+
+                    const response = await axios.post('https://remove.bg', formData, {
+                        headers: { 
+                            ...formData.getHeaders(),
+                            'X-API-Key': process.env.REMOVE_BG_KEY 
+                        },
                         responseType: 'arraybuffer'
                     });
 
@@ -202,12 +204,12 @@ client.on('messageCreate', async (message) => {
                     await message.channel.send({ content: `✂️ **تم قص الخلفية بنجاح وتفريغ الصورة يا وحش:**`, files: [imageAttachment] });
                     await waitingMessage.delete().catch(() => null);
                 } catch (error) {
-                    await waitingMessage.edit('❌ **حدث خطأ، تأكد من إضافة مفتاح REMOVE_BG_KEY في راندر.**');
+                    console.error(error);
+                    await waitingMessage.edit('❌ **حدث خطأ، تأكد من إضافة مفتاح REMOVE_BG_KEY بشكل صحيح وصلاحية الحساب.**');
                 }
                 return;
             }
 
-            // تعديل وتحسين الصورة عبر الرؤية الذكية للـ Gemini
             if (content.includes('عدل') || content.includes('تعديل') || content.includes('احسن')) {
                 await message.channel.sendTyping();
                 const waitingMessage = await message.reply('🪄 **جاري تحليل صورتك وتعديلها وتحسين جودتها بالذكاء الاصطناعي...**');
@@ -219,14 +221,20 @@ client.on('messageCreate', async (message) => {
                     const response = await ai.models.generateContent({
                         model: 'gemini-2.5-flash',
                         contents: [
-                            { inlineData: { data: base64Image, mimeType: 'image/jpeg' } },
-                            "قم بتحليل هذه الصورة وتحسين ألوانها وإعطاء نصائح لتعديلها لتصبح احترافية بأعلى جودة ممكنة."
+                            {
+                                role: 'user',
+                                parts: [
+                                    { inlineData: { data: base64Image, mimeType: 'image/jpeg' } },
+                                    { text: "قم بتحليل هذه الصورة وتحسين ألوانها وإعطاء نصائح لتعديلها لتصبح احترافية بأعلى جودة ممكنة." }
+                                ]
+                            }
                         ],
                     });
 
                     await message.reply(`🪄 **تحليل وتعديل الصورة الذكي:**\n\n${response.text}`);
                     await waitingMessage.delete().catch(() => null);
                 } catch (error) {
+                    console.error(error);
                     await waitingMessage.edit('❌ **عذراً يا وحش، واجهت مشكلة أثناء محاولة تعديل وتحسين الصورة.**');
                 }
                 return;
@@ -235,7 +243,7 @@ client.on('messageCreate', async (message) => {
         return;
     }
 
-    // 3. تشغيل ميزة الأسئلة والدردشة العامة للـ AI (فقط إذا كانت الرسالة في الروم المحدد بالبطاقة الثالثة)
+    // 3. ميزة الأسئلة العامة (فقط إذا كانت الرسالة في الروم المحدد بالبطاقة الثالثة)
     if (currentChannelId === aiChannel) {
         if (content.length > 1) {
             await message.channel.sendTyping();
@@ -246,6 +254,7 @@ client.on('messageCreate', async (message) => {
                 });
                 await message.reply(response.text);
             } catch (error) {
+                console.error(error);
                 await message.reply('❌ **واجهت مشكلة في معالجة طلبك حالياً، حاول مجدداً لاحقاً.**');
             }
         }
