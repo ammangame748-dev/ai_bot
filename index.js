@@ -49,9 +49,14 @@ client.on('messageCreate', async (message) => {
             const matchedUrls = content.match(urlRegex);
             if (!matchedUrls) return;
 
-            const targetUrl = matchedUrls[0];
+            // أخذ الرابط الأول الصافي من المصفوفة وتنظيفه من زوائد إنستغرام والتيك توك
+let targetUrl = matchedUrls[0];
+if (targetUrl.includes('?')) {
+    targetUrl = targetUrl.split('?')[0];
+}
 
-            const waiting = await message.reply('⏳ جاري تحميل الفيديو...');
+const waiting = await message.reply('⏳ جاري جلب وتحميل الفيديو من الرابط...');
+
 
             // استخدام سيرفر بديل لـ Cobalt مع إضافة مهلة زمنية 20 ثانية لمنع التعليق
             const response = await axios.post(
