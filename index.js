@@ -1,25 +1,22 @@
 const { Client, GatewayIntentBits, AttachmentBuilder } = require('discord.js');
 const express = require('express');
 const axios = require('axios');
-const { QuickDB } = require('quick.db');
+const Jsoning = require('jsoning');
 
 const app = express();
-const db = new QuickDB(); // قاعدة بيانات محلية سريعة لحفظ رومات لوحة التحكم
+const db = new Jsoning('database.json'); // قاعدة بيانات ملف JSON خفيفة ومضمونة 100% على Render
 const PORT = process.env.PORT || 3000;
 
-// إعداد قراءة البيانات المرسلة من لوحة التحكم
 app.use(express.urlencoded({ extended: true }));
 
 // -------------------------------------------------------------
-// لوحة التحكم (Dashboard) - صفحة الويب الـ HTML النارية والمختصرة
+// لوحة التحكم (Dashboard)
 // -------------------------------------------------------------
 app.get('/', async (req, res) => {
-    // جلب الأي دي الحالي للرومات المخزنة من قاعدة البيانات
     const downloadChannel = await db.get('download_channel') || '';
     const artChannel = await db.get('art_channel') || '';
     const aiChannel = await db.get('ai_channel') || '';
 
-    // صفحة الويب بتصميم احترافي وسريع ومناسب للموبايل
     res.send(`
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
@@ -46,21 +43,18 @@ app.get('/', async (req, res) => {
             <p>قم بوضع معرف الروم (Channel ID) في البطاقة المناسبة ليشتغل البوت هناك تلقائياً!</p>
             
             <form action="/save" method="POST">
-                <!-- البطاقة الأولى: روم تحميل الفيديوهات -->
                 <div class="card">
                     <h3>🎬 البطاقة الأولى: روم الميديا</h3>
                     <label>روم تحميل فيديوهات انستا، تيك توك، وتويتر:</label>
                     <input type="text" name="download_channel" value="${downloadChannel}" placeholder="أدخل Channel ID هنا">
                 </div>
 
-                <!-- ِالبطاقة الثانية: روم توليد وتعديل الصور -->
                 <div class="card">
                     <h3>🎨 البطاقة الثانية: روم الصور</h3>
                     <label>روم إنشاء، تعديل، وإزالة خلفية الصور:</label>
                     <input type="text" name="art_channel" value="${artChannel}" placeholder="أدخل Channel ID هنا">
                 </div>
 
-                <!-- البطاقة الثالثة: روم أسئلة الـ AI -->
                 <div class="card">
                     <h3>🧠 البطاقة الثالثة: روم أسئلة الـ AI</h3>
                     <label>روم الدردشة والإجابة على أسئلة الذكاء الاصطناعي العامة:</label>
@@ -76,10 +70,9 @@ app.get('/', async (req, res) => {
     `);
 });
 
-// استقبال وحفظ البيانات القادمة من لوحة التحكم في قاعدة البيانات
 app.post('/save', async (req, res) => {
     const { download_channel, art_channel, ai_channel } = req.body;
-    
+
     await db.set('download_channel', download_channel.trim());
     await db.set('art_channel', art_channel.trim());
     await db.set('ai_channel', ai_channel.trim());
@@ -91,7 +84,6 @@ app.listen(PORT, () => console.log(`🚀 الويب ولوحة التحكم تع
 // -------------------------------------------------------------
 // كود وبوت الديسكورد الذكي والمربوط بالـ Dashboard
 // -------------------------------------------------------------
-// استخدام المكتبة المستقرة والمتوافقة تماماً مع CommonJS لـ Render
 const { GoogleGenAI } = require('@google/genai');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -174,7 +166,7 @@ client.on('messageCreate', async (message) => {
                     config: { numberOfImages: 1, outputMimeType: 'image/jpeg', aspectRatio: '1:1' },
                 });
 
-                const base64Image = response.generatedImages[0].image.imageBytes;
+                const base64Image = response.generatedImages.image.imageBytes;
                 const buffer = Buffer.from(base64Image, 'base64');
                 const imageAttachment = new AttachmentBuilder(buffer, { name: 'GEMZ_Art.jpg' });
 
@@ -189,7 +181,7 @@ client.on('messageCreate', async (message) => {
         // ب) معالجة الصور المرفوعة (إزالة خلفية أو تعديل)
         if (message.attachments.size > 0) {
             const attachedImage = message.attachments.first();
-            
+
             // إزالة الخلفية
             if (content.includes('شيل الخلفيه') || content.includes('مسح الخلفية') || content.includes('remove background')) {
                 await message.channel.sendTyping();
