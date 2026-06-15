@@ -111,19 +111,20 @@ client.on('messageCreate', async (message) => {
     const artChannel = await db.get('art_channel');
     const aiChannel = await db.get('ai_channel');
 
-    // 1. ميزة تحميل الفيديوهات
+       // 1. ميزة تحميل الفيديوهات
     if (downloadChannel && currentChannelId === downloadChannel) {
         if (content.includes('tiktok.com') || content.includes('instagram.com') || content.includes('twitter.com') || content.includes('x.com')) {
             await message.channel.sendTyping();
             const urlRegex = /(https?:\/\/[^\s]+)/g;
             const matchedUrls = content.match(urlRegex);
             if (!matchedUrls) return;
-            const targetUrl = matchedUrls[0]; 
+            
+            // الحل الصحيح: نأخذ الرابط الأول من المصفوفة [0] ثم نقوم بفصله لتنظيفه
+            let targetUrl = matchedUrls[0].split('?')[0]; 
 
             const waitingMessage = await message.reply('⏳ **جاري سحب الفيديو بجودة عالية، انتظرني يا وحش...**');
 
             try {
-                // تعديل: استخدام Endpoint العام والبديل المستقر المفتوح لـ Cobalt لمنع خطأ 405
                 const response = await axios.post('https://wuk.sh', {
                     url: targetUrl,
                     vQuality: '720'
@@ -198,14 +199,13 @@ client.on('messageCreate', async (message) => {
                     formData.append('image_url', attachedImage.url);
                     formData.append('size', 'auto');
 
-                    const response = await axios.post('https://remove.bg', formData, {
-                        headers: { 
-                            ...formData.getHeaders(),
-                            'X-API-Key': process.env.REMOVE_BG_KEY 
-                        },
-                        responseType: 'arraybuffer'
-                    });
-
+                   const response = await axios.post('https://api.remove.bg/v1.0/removebg', formData, {
+  headers: {
+    ...formData.getHeaders(),
+    'X-API-Key': process.env.REMOVE_BG_KEY
+  },
+  responseType: 'arraybuffer'
+});
                     const imageAttachment = new AttachmentBuilder(Buffer.from(response.data), { name: 'GEMZ_NoBg.png' });
                     await message.channel.send({ content: `✂️ **تم قص الخلفية بنجاح وتفريغ الصورة يا وحش:**`, files: [imageAttachment] });
                     await waitingMessage.delete().catch(() => null);
