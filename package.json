@@ -1,16 +1,20 @@
 {
-  "name": "gemz-bot",
+  "name": "ai-bot",
   "version": "1.0.0",
+  "description": "Discord Bot with AI Chat, Image Tools, and Video Downloader",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
-    "discord.js": "^14.14.1",
-    "express": "^4.18.2",
-    "axios": "^1.6.0",
-    "jsoning": "^0.10.0",
-    "form-data": "^4.0.0",
-    "@google/genai": "^2.8.0"
+    "axios": "^1.7.9",
+    "discord.js": "^14.17.3",
+    "express": "^4.21.2",
+    "form-data": "^4.0.2",
+    "groq-sdk": "^0.9.0",
+    "jsoning": "^0.11.3"
   }
 }
