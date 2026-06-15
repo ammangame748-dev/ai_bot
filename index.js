@@ -118,7 +118,7 @@ client.on('messageCreate', async (message) => {
             const urlRegex = /(https?:\/\/[^\s]+)/g;
             const matchedUrls = content.match(urlRegex);
             if (!matchedUrls) return;
-            const targetUrl = matchedUrls[0];
+            const targetUrl = matchedUrls;
 
             const waitingMessage = await message.reply('⏳ **جاري سحب الفيديو بجودة عالية وفصله عن الخلفية، انتظرني يا وحش...**');
 
@@ -167,7 +167,7 @@ client.on('messageCreate', async (message) => {
                     config: { numberOfImages: 1, outputMimeType: 'image/jpeg', aspectRatio: '1:1' },
                 });
 
-                const base64Image = response.generatedImages[0].image.imageBytes;
+                const base64Image = response.generatedImages.image.imageBytes;
                 const buffer = Buffer.from(base64Image, 'base64');
                 const imageAttachment = new AttachmentBuilder(buffer, { name: 'GEMZ_Art.jpg' });
 
