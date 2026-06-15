@@ -8,7 +8,6 @@ const { Client, GatewayIntentBits, AttachmentBuilder } = require('discord.js');
 const axios = require('axios');
 const Jsoning = require('jsoning');
 const FormData = require('form-data');
-const Groq = require('groq-sdk');
 
 const db = new Jsoning('database.json');
 const Groq = require('groq-sdk');
