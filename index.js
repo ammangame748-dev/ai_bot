@@ -231,6 +231,16 @@ await message.reply(reply);
 
 // ---------------- LOGIN ----------------
 client.login(process.env.DISCORD_TOKEN);
+app.get('/', (req, res) => {
+    res.send(`
+        <h1 style="text-align:center;margin-top:50px;">
+            🤖 Bot is Running Successfully
+        </h1>
+        <p style="text-align:center;">
+            Dashboard / API is active
+        </p>
+    `);
+});
 app.listen(process.env.PORT || 3000, () => {
     console.log("🌐 Server running on port", process.env.PORT || 3000);
 });
