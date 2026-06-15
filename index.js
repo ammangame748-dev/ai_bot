@@ -1,7 +1,6 @@
 const { Client, GatewayIntentBits, AttachmentBuilder } = require('discord.js');
 const express = require('express');
 const axios = require('axios');
-const { GoogleGenAI } = require('@google/genai');
 const { QuickDB } = require('quick.db');
 
 const app = express();
@@ -92,6 +91,8 @@ app.listen(PORT, () => console.log(`🚀 الويب ولوحة التحكم تع
 // -------------------------------------------------------------
 // كود وبوت الديسكورد الذكي والمربوط بالـ Dashboard
 // -------------------------------------------------------------
+// استخدام المكتبة المستقرة والمتوافقة تماماً مع CommonJS لـ Render
+const { GoogleGenAI } = require('@google/genai');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const client = new Client({
@@ -173,7 +174,7 @@ client.on('messageCreate', async (message) => {
                     config: { numberOfImages: 1, outputMimeType: 'image/jpeg', aspectRatio: '1:1' },
                 });
 
-                const base64Image = response.generatedImages.image.imageBytes;
+                const base64Image = response.generatedImages[0].image.imageBytes;
                 const buffer = Buffer.from(base64Image, 'base64');
                 const imageAttachment = new AttachmentBuilder(buffer, { name: 'GEMZ_Art.jpg' });
 
