@@ -26,7 +26,7 @@ app.get('/', (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>لوحة تحكم بوت الذكاء الاصطناعي المتكامل</title>
-        <link href="https://googleapis.com" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
         <style>
             body {
                 font-family: 'Tajawal', sans-serif;
@@ -214,8 +214,8 @@ const client = new Client({
 // جلب مفاتيح الـ API من متغيرات بيئة Render مباشرة لضمان الحماية
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const groq = new OpenAI({
-    apiKey: process.env.GROQ_API_KEY,
-    baseURL: "https://groq.com"
+  apiKey: process.env.GROQ_API_KEY,
+  baseURL: "https://api.groq.com/openai/v1"
 });
 
 client.once('ready', () => {
@@ -237,7 +237,7 @@ client.on('messageCreate', async (message) => {
             const imageUrl = message.attachments.first().url;
             
             try {
-                const response = await axios.post('https://remove.bg', 
+                const response = await axios.post('https://api.remove.bg/v1.0/removebg',
                     { image_url: imageUrl, size: 'auto' },
                     { headers: { 'X-API-Key': process.env.REMOVE_BG_KEY }, responseType: 'arraybuffer' }
                 );
@@ -263,7 +263,7 @@ client.on('messageCreate', async (message) => {
                     n: 1,
                     size: "1024x1024",
                 });
-                return message.reply(imageResponse.data.url);
+                return message.reply(imageResponse.data[0].url);
             } catch (error) {
                 console.error(error);
                 return message.reply("❌ فشل إنشاء الصورة. تأكد من صلاحية ورصيد مفتاح OPENAI_API_KEY الخاص بك.");
@@ -279,7 +279,7 @@ client.on('messageCreate', async (message) => {
                 messages: [{ role: "user", content: message.content }],
                 model: "llama3-8b-8192", 
             });
-            return message.reply(chatCompletion.choices.message.content);
+            return message.reply(chatCompletion.choices[0].message.content);
         } catch (error) {
             console.error(error);
             return message.reply("❌ حدث خطأ في خادم الدردشة. تأكد من صحة ورصيد مفتاح GROQ_API_KEY.");
@@ -297,7 +297,7 @@ client.on('messageCreate', async (message) => {
 
             try {
                 // استخدام الخادم المفتوح المعتمد Cobalt للتحميل المباشر
-                const cobaltResponse = await axios.post('https://cobalt.tools', {
+                const cobaltResponse = await axios.post('https://api.cobalt.tools/api/json', {
                     url: matchedUrls[0], // نمرر أول رابط تم العثور عليه بشكل صحيح كـ String
                     vQuality: "720"
                 }, {
