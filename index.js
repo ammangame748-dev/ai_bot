@@ -346,3 +346,12 @@ client.on('messageCreate', async (message) => {
         }
     }
 });
+// 3. تشغيل البوت بربطه بالتوكن الخاص به من متغيرات البيئة
+// تأكد من إضافة DISCORD_TOKEN في إعدادات البيئة (Environment Variables) على Render
+if (process.env.DISCORD_TOKEN) {
+    client.login(process.env.DISCORD_TOKEN).catch(err => {
+        console.error("❌ فشل تسجيل دخول البوت! تأكد من صحة التوكن والصلاحيات:", err.message);
+    });
+} else {
+    console.error("❌ خطأ: لم يتم العثور على متغير البيئة DISCORD_TOKEN!");
+}
