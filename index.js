@@ -277,7 +277,7 @@ client.on('messageCreate', async (message) => {
         try {
             const chatCompletion = await groq.chat.completions.create({
                 messages: [{ role: "user", content: message.content }],
-                model: "llama3-8b-8192", 
+                model: "llama-3.1-8b-instant",
             });
             return message.reply(chatCompletion.choices[0].message.content);
         } catch (error) {
