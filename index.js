@@ -134,7 +134,8 @@ async function askAI(text, userId) {
     }
   );
 
-  const reply = res.data.choices[0]?.message?.content || "لم أتمكن من الحصول على رد.";
+ const reply = res.data.choices?.[0]?.message?.content || "لم أتمكن من الحصول على رد.";
+
 
   history.push(
     { role: "user", content: text },
@@ -186,33 +187,33 @@ const res = await axios.post(
 }
 
 
-/* ================= IMAGE ANALYSIS ================= */
 async function analyzeImage(url) {
   const res = await axios.post(
     "https://openrouter.ai/api/v1/chat/completions",
     {
-      model: "meta-llama/llama-3-vision:free",
+      model: "google/gemini-flash-1.5-8b", // نموذج رؤية مجاني ومستقر جداً على OpenRouter
       messages: [
         {
           role: "user",
           content: [
-            { type: "text", text: "حلل الصورة بالتفصيل" },
-            { type: "image_url", image_url: { url } }
+            { type: "text", text: "حلل الصورة بالتفصيل باللغة العربية" },
+            { type: "image_url", image_url: { url: url } } // تأكيد الصياغة الصحيحة هنا
           ]
         }
       ]
     },
     {
-         headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json"
-    }
-
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json"
+      }
     }
   );
 
-  return res.data.choices[0].message.content;
+  return res.data.choices?.[0]?.message?.content || "لم أتمكن من تحليل الصورة.";
+
 }
+
 
 /* ================= DISCORD ================= */
 const client = new Client({
@@ -232,55 +233,63 @@ client.on("messageCreate", async (message) => {
 
   const msg = message.content;
   const userId = message.author.id;
-  const channelId = message.channel.id; // أضفنا هذا السطر هنا
+  const channelId = message.channel.id;
 
   if (!rateLimit(userId)) {
     return message.reply("⏳ Slow down شوي");
   }
 
-
   try {
+    /* 🤖 AI */
+    if (msg.startsWith("سؤال") && botSettings.ai_room && channelId === botSettings.ai_room) {
+      const text = msg.replace("سؤال", "").trim();
+      if (!text) return message.reply("❌ اكتب سؤالك بعد كلمة سؤال");
 
-  /* 🤖 AI */
-  if (msg.startsWith("سؤال") && botSettings.ai_room && channelId === botSettings.ai_room) {
-    const text = msg.replace("سؤال", "").trim();
-    if (!text) return message.reply("❌ اكتب سؤالك بعد كلمة سؤال");
+      await message.channel.sendTyping(); 
+      const reply = await askAI(text, userId);
+      return message.reply(reply);
+    }
 
-    await message.channel.sendTyping(); 
-    const reply = await askAI(text, userId);
-    return message.reply(reply);
-  }
-
-  /* 🖼️ IMAGE ANALYSIS */
-  if (msg.includes("حلل") && message.attachments.size > 0 && botSettings.vision_room && channelId === botSettings.vision_room) {
-
+    /* 🖼️ IMAGE ANALYSIS */
+    if (msg.includes("حلل") && message.attachments.size > 0 && botSettings.vision_room && channelId === botSettings.vision_room) {
+      await message.channel.sendTyping();
       const img = message.attachments.first().url;
       const result = await analyzeImage(img);
       return message.reply(result);
     }
 
-   /* ✂️ REMOVE BG */
-  if (msg.includes("ازالة خلفية") && message.attachments.size > 0 && botSettings.bg_room && channelId === botSettings.bg_room) {
-
-      const img = message.attachments.first().url;
-      const buffer = await removeBG(img);
-
-      return message.reply({
-        files: [new AttachmentBuilder(buffer, { name: "no-bg.png" })]
-      });
+    /* ✂️ REMOVE BG */
+    if (msg.includes("ازالة خلفية") && message.attachments.size > 0 && botSettings.bg_room && channelId === botSettings.bg_room) {
+      try {
+        const img = message.attachments.first().url;
+        await message.channel.sendTyping();
+        const buffer = await removeBG(img);
+        return message.reply({
+          files: [new AttachmentBuilder(buffer, { name: "no-bg.png" })]
+        });
+      } catch (err) {
+        console.error("BG ERROR:", err);
+        return message.reply("❌ فشل إزالة الخلفية");
+      }
     }
 
     /* 📥 VIDEO DOWNLOAD */
-    if (/instagram|tiktok|twitter|x\.com/.test(msg)) {
-      const video = await downloadVideo(msg);
-
-      if (!video) return message.reply("❌ ما قدرت أحمل الفيديو");
-
-      return message.reply(video);
+    if (/instagram|tiktok|twitter|x\.com/.test(msg) && botSettings.download_room && channelId === botSettings.download_room) {
+      try {
+        await message.channel.sendTyping();
+        const video = await downloadVideo(msg);
+        if (!video) {
+          return message.reply("❌ ما قدرت أحمل الفيديو");
+        }
+        return message.reply(video);
+      } catch (err) {
+        console.error("DOWNLOAD ERROR:", err);
+        return message.reply("❌ صار خطأ أثناء تحميل الفيديو");
+      }
     }
 
   } catch (err) {
-    console.log(err);
+    console.error("GLOBAL ERROR:", err);
     return message.reply("❌ صار خطأ داخل النظام");
   }
 });
