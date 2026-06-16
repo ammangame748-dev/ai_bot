@@ -154,30 +154,51 @@ async function removeBG(url) {
   });
   return Buffer.from(res.data);
 }
-
 async function downloadVideo(url) {
-  try {
-    const res = await axios.post(
-      "https://cobalt.tools/api/json",
-      {
-        url: url
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
+  // استخدام خوادم Cobalt عامة ومستقرة
+  const apis = [
+    "https://api.cobalt.tools/api/json", 
+    "https://da.gd"
+  ];
+
+  for (const api of apis) {
+    try {
+      const res = await axios.post(
+        api,
+        { 
+          url: url,
+          videoQuality: "720", // تحديد جودة افتراضية تضمن نجاح الطلب
+          filenamePattern: "basic"
         },
-        timeout: 25000
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            // ترويسة ضرورية جداً لمنع حظر الحماية (Cloudflare / Bot Protection)
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          },
+          timeout: 15000 // 15 ثانية كافية قبل الانتقال للسيرفر البديل
+        }
+      );
+
+      // بعض سيرفرات Cobalt تُرجع الرابط في حقل text أو url حسب نوع الميديا
+      const videoUrl = res.data?.url || res.data?.text;
+      
+      if (videoUrl && videoUrl.startsWith('http')) {
+        return videoUrl;
       }
-    );
 
-    return res.data?.url || null;
-
-  } catch (err) {
-    console.error("DOWNLOAD ERROR:", err?.response?.data || err.message);
-    return null;
+    } catch (err) {
+      // طباعة تفاصيل الخطأ القادم من السيرفر لمعرفة السبب بدقة
+      const status = err.response?.status ? `[Status ${err.response.status}]` : '';
+      console.error(`API FAILED: ${api} ${status}`, err.response?.data?.text || err.message);
+      continue; // الانتقال تلقائياً للسيرفر التالي في المصفوفة
+    }
   }
+
+  return null; // تعيد null إذا فشلت جميع السيرفرات
 }
+
 
 /* ================= IMAGE ANALYSIS FUNCTION ================= */
 async function analyzeImage(url) {
