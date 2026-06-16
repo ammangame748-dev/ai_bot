@@ -1,8 +1,8 @@
-const { Client, GatewayIntentBits, AttachmentBuilder } = require('discord.js');
-const { OpenAI } = require('openai');
-const express = require('express');
-const axios = require('axios');
-const path = require('path');
+import { Client, GatewayIntentBits, AttachmentBuilder } from 'discord.js';
+import { OpenAI } from 'openai';
+import express from 'express';
+import axios from 'axios';
+import path from 'path';
 
 // 1. إعداد خادم الويب (Express) للداش بورد على منصة Render
 const app = express();
@@ -150,7 +150,7 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
 
-                <!-- ⁩البطاقة الثانية -->
+                <!-- البطاقة الثانية -->
                 <div class="card">
                     <div>
                         <div class="card-title" style="color: #3b82f6;">💬 بطاقة الأسئلة والدردشة</div>
@@ -162,7 +162,7 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
 
-                <!-- ⁩البطاقة الثالثة -->
+                <!-- البطاقة الثالثة -->
                 <div class="card">
                     <div>
                         <div class="card-title" style="color: #10b981;">📥 بطاقة تحميل الروابط</div>
