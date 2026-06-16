@@ -1,6 +1,5 @@
 import { Client, GatewayIntentBits, AttachmentBuilder } from 'discord.js';
-import pkg from 'replicate';
-const { Replicate } = pkg;
+import Replicate from "replicate";
 import express from 'express';
 import axios from 'axios';
 
