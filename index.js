@@ -3,14 +3,98 @@ import { Client, GatewayIntentBits, AttachmentBuilder } from "discord.js";
 import express from "express";
 import axios from "axios";
 import FormData from "form-data";
+import fs from "fs"; // مسح أو إضافة هذا السطر مع الـ imports فوق
+
+const SETTINGS_FILE = "./bot_settings.json";
+let botSettings = {
+  ai_room: "",
+  vision_room: "",
+  bg_room: "",
+  download_room: ""
+};
+
+// إذا الملف موجود، اقرأ البيانات منه
+if (fs.existsSync(SETTINGS_FILE)) {
+  botSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+}
+
+// دالة لحفظ الإعدادات بالملف عند التعديل
+function saveSettings() {
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(botSettings, null, 2));
+}
 
 /* ================= SERVER ================= */
 const app = express();
 app.use(express.json());
 
+// تفعيل قراءة البيانات القادمة من الفورم (توضع تحت app.use(express.json());)
+app.use(express.urlencoded({ extended: true }));
+
 app.get("/", (req, res) => {
-  res.send("🤖 ULTIMATE BOT V3 PRO ONLINE");
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+      <meta charset="UTF-8">
+      <title>لوحة التحكم</title>
+      <style>
+        body { font-family: sans-serif; background-color: #0f111a; color: #fff; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { max-width: 800px; width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 20px; }
+        .card { background-color: #161925; border: 1px solid #23273a; border-radius: 10px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .card h3 { margin-top: 0; color: #5865F2; }
+        input { background-color: #0f111a; border: 1px solid #23273a; padding: 10px; border-radius: 6px; color: #fff; width: 90%; }
+        .btn { grid-column: 1 / -1; background-color: #5865F2; color: #fff; padding: 15px; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        .btn:hover { background-color: #4752c4; }
+      </style>
+    </head>
+    <body>
+      <h1>🤖 لوحة تحكم البوت الاحترافية</h1>
+      <form action="/save" method="POST" style="width: 100%; max-width: 800px; display: contents;">
+        <div class="container">
+          
+          <div class="card">
+            <h3>🤖 بطاقة الذكاء الاصطناعي</h3>
+            <p>أدخل ID الروم المخصصة لأمر (سؤال):</p>
+            <input type="text" name="ai_room" value="${botSettings.ai_room}">
+          </div>
+
+          <div class="card">
+            <h3>🖼️ بطاقة تحليل الصور</h3>
+            <p>أدخل ID الروم المخصصة لأمر (حلل):</p>
+            <input type="text" name="vision_room" value="${botSettings.vision_room}">
+          </div>
+
+          <div class="card">
+            <h3>✂️ بطاقة إزالة الخلفية</h3>
+            <p>أدخل ID الروم المخصصة لأمر (ازالة خلفية):</p>
+            <input type="text" name="bg_room" value="${botSettings.bg_room}">
+          </div>
+
+          <div class="card">
+            <h3>📥 بطاقة تحميل الفيديوهات</h3>
+            <p>أدخل ID الروم المخصصة للروابط المباشرة:</p>
+            <input type="text" name="download_room" value="${botSettings.download_room}">
+          </div>
+
+          <button type="submit" class="btn">💾 حفظ الإعدادات وتحديث البوت</button>
+        </div>
+      </form>
+    </body>
+    </html>
+  `);
 });
+
+// استقبال البيانات عند الضغط على زر الحفظ
+app.post("/save", (req, res) => {
+  botSettings.ai_room = req.body.ai_room.trim();
+  botSettings.vision_room = req.body.vision_room.trim();
+  botSettings.bg_room = req.body.bg_room.trim();
+  botSettings.download_room = req.body.download_room.trim();
+  
+  saveSettings(); // حفظ في الملف النصي
+  res.redirect("/"); // إعادة توجيه للرئيسية
+});
+
 
 app.listen(process.env.PORT || 3000, () => {
   console.log("🌐 Dashboard running");
@@ -148,16 +232,17 @@ client.on("messageCreate", async (message) => {
 
   const msg = message.content;
   const userId = message.author.id;
+  const channelId = message.channel.id; // أضفنا هذا السطر هنا
 
   if (!rateLimit(userId)) {
     return message.reply("⏳ Slow down شوي");
   }
 
+
   try {
 
-    /* 🤖 AI */
-   /* 🤖 AI */
-  if (msg.startsWith("سؤال")) {
+  /* 🤖 AI */
+  if (msg.startsWith("سؤال") && botSettings.ai_room && channelId === botSettings.ai_room) {
     const text = msg.replace("سؤال", "").trim();
     if (!text) return message.reply("❌ اكتب سؤالك بعد كلمة سؤال");
 
@@ -166,16 +251,17 @@ client.on("messageCreate", async (message) => {
     return message.reply(reply);
   }
 
+  /* 🖼️ IMAGE ANALYSIS */
+  if (msg.includes("حلل") && message.attachments.size > 0 && botSettings.vision_room && channelId === botSettings.vision_room) {
 
-    /* 🖼️ IMAGE ANALYSIS */
-    if (msg.includes("حلل") && message.attachments.size > 0) {
       const img = message.attachments.first().url;
       const result = await analyzeImage(img);
       return message.reply(result);
     }
 
-    /* ✂️ REMOVE BG */
-    if (msg.includes("ازالة خلفية") && message.attachments.size > 0) {
+   /* ✂️ REMOVE BG */
+  if (msg.includes("ازالة خلفية") && message.attachments.size > 0 && botSettings.bg_room && channelId === botSettings.bg_room) {
+
       const img = message.attachments.first().url;
       const buffer = await removeBG(img);
 
