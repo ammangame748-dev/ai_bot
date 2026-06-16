@@ -3,18 +3,19 @@ import { Client, GatewayIntentBits, AttachmentBuilder } from "discord.js";
 import express from "express";
 import axios from "axios";
 import FormData from "form-data";
-import fs from "fs"; // مسح أو إضافة هذا السطر مع الـ imports فوق
+import fs from "fs";
+
+/* ================= SAFE REPLY FUNCTION ================= */
 function safeReply(message, text) {
   if (!text) return;
-
   const max = 3900;
-
   if (text.length > max) {
     text = text.slice(0, max) + "\n\n... (cut)";
   }
-
   return message.reply(text);
 }
+
+/* ================= SETTINGS MANAGER (DATABASE) ================= */
 const SETTINGS_FILE = "./bot_settings.json";
 let botSettings = {
   ai_room: "",
@@ -23,21 +24,21 @@ let botSettings = {
   download_room: ""
 };
 
-// إذا الملف موجود، اقرأ البيانات منه
 if (fs.existsSync(SETTINGS_FILE)) {
-  botSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+  try {
+    botSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+  } catch (e) {
+    console.log("Creating new settings file");
+  }
 }
 
-// دالة لحفظ الإعدادات بالملف عند التعديل
 function saveSettings() {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(botSettings, null, 2));
 }
 
-/* ================= SERVER ================= */
+/* ================= SERVER & DASHBOARD ================= */
 const app = express();
 app.use(express.json());
-
-// تفعيل قراءة البيانات القادمة من الفورم (توضع تحت app.use(express.json());)
 app.use(express.urlencoded({ extended: true }));
 
 app.get("/", (req, res) => {
@@ -61,31 +62,26 @@ app.get("/", (req, res) => {
       <h1>🤖 لوحة تحكم البوت الاحترافية</h1>
       <form action="/save" method="POST" style="width: 100%; max-width: 800px; display: contents;">
         <div class="container">
-          
           <div class="card">
             <h3>🤖 بطاقة الذكاء الاصطناعي</h3>
             <p>أدخل ID الروم المخصصة لأمر (سؤال):</p>
             <input type="text" name="ai_room" value="${botSettings.ai_room}">
           </div>
-
           <div class="card">
             <h3>🖼️ بطاقة تحليل الصور</h3>
             <p>أدخل ID الروم المخصصة لأمر (حلل):</p>
             <input type="text" name="vision_room" value="${botSettings.vision_room}">
           </div>
-
           <div class="card">
             <h3>✂️ بطاقة إزالة الخلفية</h3>
             <p>أدخل ID الروم المخصصة لأمر (ازالة خلفية):</p>
             <input type="text" name="bg_room" value="${botSettings.bg_room}">
           </div>
-
           <div class="card">
             <h3>📥 بطاقة تحميل الفيديوهات</h3>
             <p>أدخل ID الروم المخصصة للروابط المباشرة:</p>
             <input type="text" name="download_room" value="${botSettings.download_room}">
           </div>
-
           <button type="submit" class="btn">💾 حفظ الإعدادات وتحديث البوت</button>
         </div>
       </form>
@@ -94,26 +90,21 @@ app.get("/", (req, res) => {
   `);
 });
 
-// استقبال البيانات عند الضغط على زر الحفظ
 app.post("/save", (req, res) => {
   botSettings.ai_room = req.body.ai_room.trim();
   botSettings.vision_room = req.body.vision_room.trim();
   botSettings.bg_room = req.body.bg_room.trim();
   botSettings.download_room = req.body.download_room.trim();
-  
-  saveSettings(); // حفظ في الملف النصي
-  res.redirect("/"); // إعادة توجيه للرئيسية
+  saveSettings();
+  res.redirect("/");
 });
-
 
 app.listen(process.env.PORT || 3000, () => {
   console.log("🌐 Dashboard running");
 });
 
-/* ================= MEMORY ================= */
+/* ================= MEMORY & RATE LIMIT ================= */
 const memory = new Map();
-
-/* ================= RATE LIMIT ================= */
 const cooldown = new Map();
 function rateLimit(id) {
   const now = Date.now();
@@ -123,19 +114,15 @@ function rateLimit(id) {
   return true;
 }
 
-/* ================= AI ================= */
+/* ================= AI FUNCTION ================= */
 async function askAI(text, userId) {
   const history = memory.get(userId) || [];
-
   try {
     const res = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
+      "https://openrouter.ai",
       {
         model: "google/gemini-flash-1.5",
-        messages: [
-          ...history,
-          { role: "user", content: text }
-        ]
+        messages: [...history, { role: "user", content: text }]
       },
       {
         headers: {
@@ -145,84 +132,52 @@ async function askAI(text, userId) {
         timeout: 20000
       }
     );
-
-    const reply =
-      res.data?.choices?.[0]?.message?.content ||
-      "لم أتمكن من الحصول على رد.";
-
-    if (!reply || reply.trim().length === 0) {
-      return "لم أتمكن من الحصول على رد.";
-    }
-
-    history.push(
-      { role: "user", content: text },
-      { role: "assistant", content: reply }
-    );
-
+    const reply = res.data?.choices?.[0]?.message?.content || "لم أتمكن من الحصول على رد.";
+    history.push({ role: "user", content: text }, { role: "assistant", content: reply });
     if (history.length > 10) history.splice(0, 2);
-
     memory.set(userId, history);
-
     return reply;
-
   } catch (err) {
     console.error("AI ERROR:", err?.response?.data || err.message);
     return "❌ صار خطأ في الذكاء الاصطناعي";
   }
 }
-/* ================= REMOVE BG ================= */
+
+/* ================= REMOVE BG FUNCTION ================= */
 async function removeBG(url) {
   const form = new FormData();
   form.append("image_url", url);
   form.append("size", "auto");
-
-  const res = await axios.post(
-    "https://api.remove.bg/v1.0/removebg",
-    form,
-    {
-      headers: {
-        "X-Api-Key": process.env.REMOVE_BG_KEY,
-        ...form.getHeaders()
-      },
-      responseType: "arraybuffer"
-    }
-  );
-
+  const res = await axios.post("https://remove.bg", form, {
+    headers: { "X-Api-Key": process.env.REMOVE_BG_KEY, ...form.getHeaders() },
+    responseType: "arraybuffer"
+  });
   return Buffer.from(res.data);
 }
 
+/* ================= VIDEO DOWNLOAD FUNCTION ================= */
 async function downloadVideo(url) {
-const res = await axios.post(
-  "https://co.wuk.sh/api/json",
-  {
-    url: url
-  },
-  {
-    headers: {
-      "Content-Type": "application/json"
-    },
-    timeout: 20000
-  }
-);
-
+  const res = await axios.post(
+    "https://cobalt.tools",
+    { url: url },
+    { headers: { "Content-Type": "application/json" }, timeout: 20000 }
+  );
   return res.data?.url;
 }
 
-
+/* ================= IMAGE ANALYSIS FUNCTION ================= */
 async function analyzeImage(url) {
   const res = await axios.post(
-    "https://openrouter.ai/api/v1/chat/completions",
+    "https://openrouter.ai",
     {
-      model: "meta-llama/llama-3.1-8b-instruct", // نموذج رؤية مجاني ومستقر جداً على OpenRouter
+      model: "google/gemini-flash-1.5-8b",
       messages: [
         {
           role: "user",
-         messages: [
-  {
-    role: "user",
-    content: "حلل الصورة بالتفصيل باللغة العربية: " + url
-  }
-]
+          content: [
+            { type: "text", text: "حلل الصورة بالتفصيل باللغة العربية" },
+            { type: "image_url", image_url: { url: url } }
+          ]
         }
       ]
     },
@@ -233,13 +188,9 @@ async function analyzeImage(url) {
       }
     }
   );
-
-  return res.data.choices?.[0]?.message?.content || "لم أتمكن من تحليل الصورة.";
-
+  return res.data?.choices?.[0]?.message?.content || "لم أتمكن من تحليل الصورة.";
 }
-
-
-/* ================= DISCORD ================= */
+/* ================= DISCORD CLIENT LOGIC ================= */
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -264,7 +215,7 @@ client.on("messageCreate", async (message) => {
   }
 
   try {
-    /* 🤖 AI */
+    /* 🤖 AI - ميزة السؤال الذكي */
     if (msg.startsWith("سؤال") && botSettings.ai_room && channelId === botSettings.ai_room) {
       const text = msg.replace("سؤال", "").trim();
       if (!text) return message.reply("❌ اكتب سؤالك بعد كلمة سؤال");
@@ -274,15 +225,20 @@ client.on("messageCreate", async (message) => {
       return safeReply(message, reply);
     }
 
-    /* 🖼️ IMAGE ANALYSIS */
+    /* 🖼️ IMAGE ANALYSIS - ميزة تحليل الصور المحدثة */
     if (msg.includes("حلل") && message.attachments.size > 0 && botSettings.vision_room && channelId === botSettings.vision_room) {
-      await message.channel.sendTyping();
-      const img = message.attachments.first().url;
-      const result = await analyzeImage(img);
-      return message.reply(result);
+      try {
+        await message.channel.sendTyping();
+        const img = message.attachments.first().url;
+        const result = await analyzeImage(img);
+        return message.reply(result);
+      } catch (err) {
+        console.error("VISION ERROR:", err);
+        return message.reply("❌ فشل تحليل الصورة، تأكد من الـ API Key الخاص بك.");
+      }
     }
 
-    /* ✂️ REMOVE BG */
+    /* ✂️ REMOVE BG - ميزة قص وإزالة خلفية الصور */
     if (msg.includes("ازالة خلفية") && message.attachments.size > 0 && botSettings.bg_room && channelId === botSettings.bg_room) {
       try {
         const img = message.attachments.first().url;
@@ -293,11 +249,11 @@ client.on("messageCreate", async (message) => {
         });
       } catch (err) {
         console.error("BG ERROR:", err);
-        return message.reply("❌ فشل إزالة الخلفية");
+        return message.reply("❌ فشل إزالة الخلفية، تحقق من رصيد مفتاح remove.bg.");
       }
     }
 
-    /* 📥 VIDEO DOWNLOAD */
+    /* 📥 VIDEO DOWNLOAD - ميزة التحميل المباشر للروابط */
     if (/instagram|tiktok|twitter|x\.com/.test(msg) && botSettings.download_room && channelId === botSettings.download_room) {
       try {
         await message.channel.sendTyping();
@@ -308,17 +264,17 @@ client.on("messageCreate", async (message) => {
         return message.reply(video);
       } catch (err) {
         console.error("DOWNLOAD ERROR:", err);
-        return message.reply("❌ صار خطأ أثناء تحميل الفيديو");
+        return message.reply("❌ صار خطأ أثناء تحميل الفيديو من السيرفر.");
       }
     }
 
   } catch (err) {
     console.error("GLOBAL ERROR:", err);
-    return message.reply("❌ صار خطأ داخل النظام");
+    return message.reply("❌ صار خطأ داخل النظام العام.");
   }
 });
 
-/* ================= LOGIN ================= */
+/* ================= BOT LOGIN ================= */
 if (!process.env.DISCORD_TOKEN) {
   console.log("❌ Missing token");
 } else {
