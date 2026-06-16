@@ -158,7 +158,7 @@ async function removeBG(url) {
 async function downloadVideo(url) {
   try {
     const res = await axios.post(
-      "https://co.wuk.sh/api/json",
+      "https://cobalt.tools/api/json",
       {
         url: url
       },
@@ -167,7 +167,7 @@ async function downloadVideo(url) {
           "Content-Type": "application/json",
           "Accept": "application/json"
         },
-        timeout: 20000
+        timeout: 25000
       }
     );
 
