@@ -3,13 +3,14 @@ import { OpenAI } from 'openai';
 import Groq from 'groq-sdk';
 import axios from 'axios';
 import FormData from 'form-data';
-import { QuickDB } from 'quick.db';
+import Jsoning from 'jsoning';
 import express from 'express';
 
-// 1. إعداد السيرفر وقاعدة البيانات لبناء الداش بورد
+// 1. إعداد سيرفر وقاعدة بيانات الـ JSON الخفيفة والبديلة لـ Render
 const app = express();
-const db = new QuickDB();
+const db = new Jsoning("database.json"); // ملف محلي بسيط لحفظ البيانات بدون مشاكل sqlite3
 const PORT = process.env.PORT || 3000;
+
 
 app.use(express.urlencoded({ extended: true }));
 
