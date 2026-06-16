@@ -2,7 +2,6 @@ import { Client, GatewayIntentBits, AttachmentBuilder } from 'discord.js';
 import { OpenAI } from 'openai';
 import express from 'express';
 import axios from 'axios';
-import path from 'path';
 
 // 1. إعداد خادم الويب (Express) للداش بورد على منصة Render
 const app = express();
@@ -299,7 +298,7 @@ client.on('messageCreate', async (message) => {
             try {
                 // استخدام الخادم المفتوح المعتمد Cobalt للتحميل المباشر
                 const cobaltResponse = await axios.post('https://cobalt.tools', {
-                    url: matchedUrls[0],
+                    url: matchedUrls[0], // نمرر أول رابط تم العثور عليه بشكل صحيح كـ String
                     vQuality: "720"
                 }, {
                     headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
