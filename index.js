@@ -4,7 +4,17 @@ import express from "express";
 import axios from "axios";
 import FormData from "form-data";
 import fs from "fs"; // مسح أو إضافة هذا السطر مع الـ imports فوق
+function safeReply(message, text) {
+  if (!text) return;
 
+  const max = 3900;
+
+  if (text.length > max) {
+    text = text.slice(0, max) + "\n\n... (cut)";
+  }
+
+  return message.reply(text);
+}
 const SETTINGS_FILE = "./bot_settings.json";
 let botSettings = {
   ai_room: "",
@@ -117,37 +127,49 @@ function rateLimit(id) {
 async function askAI(text, userId) {
   const history = memory.get(userId) || [];
 
-  const res = await axios.post(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
-      model: "meta-llama/llama-3.1-8b-instruct",
-      messages: [
-        ...history,
-        { role: "user", content: text }
-      ]
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
+  try {
+    const res = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        model: "google/gemini-flash-1.5",
+        messages: [
+          ...history,
+          { role: "user", content: text }
+        ]
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 20000
       }
+    );
+
+    const reply =
+      res.data?.choices?.[0]?.message?.content ||
+      "لم أتمكن من الحصول على رد.";
+
+    if (!reply || reply.trim().length === 0) {
+      return "لم أتمكن من الحصول على رد.";
     }
-  );
 
- const reply = res.data.choices?.[0]?.message?.content || "لم أتمكن من الحصول على رد.";
+    history.push(
+      { role: "user", content: text },
+      { role: "assistant", content: reply }
+    );
 
+    if (history.length > 10) history.splice(0, 2);
 
-  history.push(
-    { role: "user", content: text },
-    { role: "assistant", content: reply }
-  );
+    memory.set(userId, history);
 
-  if (history.length > 20) history.splice(0, 2);
-  memory.set(userId, history);
+    return reply;
 
-  return reply;
+  } catch (err) {
+    console.error("AI ERROR:", err?.response?.data || err.message);
+    return "❌ صار خطأ في الذكاء الاصطناعي";
+  }
 }
-
 /* ================= REMOVE BG ================= */
 async function removeBG(url) {
   const form = new FormData();
@@ -171,7 +193,7 @@ async function removeBG(url) {
 
 async function downloadVideo(url) {
 const res = await axios.post(
-  "https://cobalt.tools/api/json",
+  "https://co.wuk.sh/api/json",
   {
     url: url
   },
@@ -191,14 +213,16 @@ async function analyzeImage(url) {
   const res = await axios.post(
     "https://openrouter.ai/api/v1/chat/completions",
     {
-      model: "google/gemini-flash-1.5-8b", // نموذج رؤية مجاني ومستقر جداً على OpenRouter
+      model: "meta-llama/llama-3.1-8b-instruct", // نموذج رؤية مجاني ومستقر جداً على OpenRouter
       messages: [
         {
           role: "user",
-          content: [
-            { type: "text", text: "حلل الصورة بالتفصيل باللغة العربية" },
-            { type: "image_url", image_url: { url: url } } // تأكيد الصياغة الصحيحة هنا
-          ]
+         messages: [
+  {
+    role: "user",
+    content: "حلل الصورة بالتفصيل باللغة العربية: " + url
+  }
+]
         }
       ]
     },
@@ -235,7 +259,7 @@ client.on("messageCreate", async (message) => {
   const userId = message.author.id;
   const channelId = message.channel.id;
 
-  if (!rateLimit(userId)) {
+  if (!rateLimit(userId + channelId)) {
     return message.reply("⏳ Slow down شوي");
   }
 
@@ -247,7 +271,7 @@ client.on("messageCreate", async (message) => {
 
       await message.channel.sendTyping(); 
       const reply = await askAI(text, userId);
-      return message.reply(reply);
+      return safeReply(message, reply);
     }
 
     /* 🖼️ IMAGE ANALYSIS */
