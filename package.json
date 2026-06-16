@@ -9,6 +9,7 @@
     "openai": "^4.28.0",
     "axios": "^1.6.8",
     "form-data": "^4.0.0",
-    "quick.db": "^9.1.7"
+    "quick.db": "^9.1.7",
+    "express": "^4.19.2"
   }
 }
