@@ -1,21 +1,16 @@
 {
-  "name": "ai-all-in-one-bot",
+  "name": "ultimate-bot",
   "version": "1.0.0",
-  "description": "Discord Bot + Dashboard with Cards config for Render",
-  "main": "index.js",
   "type": "module",
+  "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "engines": {
-    "node": "22.x"
-  },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
-    "axios": "^1.6.8",
-    "discord.js": "^14.15.0",
-    "express": "^4.19.2",
-    "openai": "^4.33.0",
-    "replicate": "^1.4.0"
+    "axios": "^1.6.0",
+    "discord.js": "^14.16.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "form-data": "^4.0.0"
   }
 }
