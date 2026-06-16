@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits, AttachmentBuilder } from 'discord.js';
-import { OpenAI } from 'openai';
+import { Replicate } from 'replicate';
 import express from 'express';
 import axios from 'axios';
 
@@ -212,11 +212,8 @@ const client = new Client({
 });
 
 // جلب مفاتيح الـ API من متغيرات بيئة Render مباشرة لضمان الحماية
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const groq = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: "https://api.groq.com/openai/v1"
-});
+const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
+
 
 client.once('ready', () => {
     console.log(`🤖 بوت الديسكورد جاهز ومتصل الآن باسم: ${client.user.tag}`);
@@ -267,38 +264,56 @@ client.on('messageCreate', async (message) => {
             if (!prompt) return message.reply("اكتب وصف الصورة");
 
             try {
-                const imageResponse = await openai.images.generate({
-                    model: "gpt-image-1",
-                    prompt,
-                    n: 1,
-                    size: "1024x1024",
-                });
+                const output = await replicate.run(
+                    "stability-ai/sdxl:39d312616b966de0f87def29d8a9e42d1a31a4805f264e466c1736c641b8a952",
+                    {
+                        input: {
+                            prompt: prompt,
+                            scheduler: "K_EULER_ANCESTRAL",
+                            guidance_scale: 7.5,
+                            num_inference_steps: 50
+                        }
+                    }
+                );
 
-                return message.reply(imageResponse.data[0].url);
+                return message.reply(Array.isArray(output) ? output[0] : output);
 
             } catch (error) {
                 console.error(error);
-                return message.reply("❌ فشل إنشاء الصورة");
+                return message.reply("❌ فشل إنشاء الصورة عبر Replicate، تأكد من رصيدك وحالة التوكن.");
             }
-        }
-    }
+            }
+
+}
+
+
 
     // 🃏 [البطاقة الثانية]: الدردشة
     if (CARDS_CONFIG.CHAT_CHANNEL_ID && channelId === CARDS_CONFIG.CHAT_CHANNEL_ID) {
         await message.channel.sendTyping();
 
-        try {
-            const chatCompletion = await groq.chat.completions.create({
-                messages: [{ role: "user", content: message.content }],
-                model: "llama-3.1-8b-instant",
-            });
+          try {
+            const response = await axios.post(
+                "https://groq.com",
+                {
+                    messages: [{ role: "user", content: message.content }],
+                    model: "llama-3.1-8b-instant",
+                },
+                {
+                    headers: {
+                        "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+                        "Content-Type": "application/json"
+                    }
+                }
+            );
 
-            return message.reply(chatCompletion.choices[0].message.content);
+            return message.reply(response.data.choices[0].message.content);
 
         } catch (error) {
             console.error(error);
             return message.reply("❌ خطأ بالدردشة");
         }
+
     }
 
     // 🃏 [البطاقة الثالثة]: تحميل الروابط
