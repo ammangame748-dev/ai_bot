@@ -155,14 +155,28 @@ async function removeBG(url) {
   return Buffer.from(res.data);
 }
 
-/* ================= VIDEO DOWNLOAD FUNCTION ================= */
 async function downloadVideo(url) {
-  const res = await axios.post(
-    "https://cobalt.tools",
-    { url: url },
-    { headers: { "Content-Type": "application/json" }, timeout: 20000 }
-  );
-  return res.data?.url;
+  try {
+    const res = await axios.post(
+      "https://co.wuk.sh/api/json",
+      {
+        url: url
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        timeout: 20000
+      }
+    );
+
+    return res.data?.url || null;
+
+  } catch (err) {
+    console.error("DOWNLOAD ERROR:", err?.response?.data || err.message);
+    return null;
+  }
 }
 
 /* ================= IMAGE ANALYSIS FUNCTION ================= */
