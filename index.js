@@ -1,246 +1,131 @@
-import { Client, GatewayIntentBits, AttachmentBuilder } from 'discord.js';
-import express from 'express';
-import axios from 'axios';
-import fs from 'fs';
-import 'dotenv/config';
+const { Client, GatewayIntentBits, AttachmentBuilder } = require('discord.js');
+const express = require('express');
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
+require('dotenv').config();
 
-// =========================
-// 🌐 EXPRESS DASHBOARD
-// =========================
+// إعدادات لوحة التحكم
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(express.json());
+const port = process.env.PORT || 3000;
 app.use(express.urlencoded({ extended: true }));
 
-const CONFIG_FILE = './cards_config.json';
-
-let CARDS_CONFIG = {
-  IMAGES_CHANNEL_ID: "",
-  CHAT_CHANNEL_ID: "",
-  LINKS_CHANNEL_ID: ""
+let config = {
+    chat_channel: '',
+    image_gen_channel: '',
+    bg_remove_channel: '',
+    video_dl_channel: ''
 };
 
-if (fs.existsSync(CONFIG_FILE)) {
-  try {
-    CARDS_CONFIG = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
-  } catch {}
-}
-
 app.get('/', (req, res) => {
-  res.send(`
-    <html dir="rtl">
-      <body style="font-family:tajawal;background:#111;color:white;padding:40px">
-        <h2>🤖 Bot Dashboard</h2>
-        <form method="POST" action="/save">
-          <input name="IMAGES_CHANNEL_ID" placeholder="Images Channel" value="${CARDS_CONFIG.IMAGES_CHANNEL_ID}" /><br><br>
-          <input name="CHAT_CHANNEL_ID" placeholder="Chat Channel" value="${CARDS_CONFIG.CHAT_CHANNEL_ID}" /><br><br>
-          <input name="LINKS_CHANNEL_ID" placeholder="Links Channel" value="${CARDS_CONFIG.LINKS_CHANNEL_ID}" /><br><br>
-          <button>Save</button>
-        </form>
-      </body>
-    </html>
-  `);
+    res.send(`
+        <html dir="rtl">
+        <body style="background: #2c2f33; color: white; font-family: sans-serif; padding: 50px;">
+            <div style="max-width: 500px; margin: auto; background: #23272a; padding: 20px; border-radius: 10px;">
+                <h1>إعدادات بوت الذكاء الاصطناعي (Replicate)</h1>
+                <form action="/save" method="POST">
+                    <label>ID قناة الدردشة (Llama 3):</label>  
+
+                    <input type="text" name="chat_channel" value="${config.chat_channel}" style="width:100%; margin: 10px 0;">  
+
+                    <label>ID قناة توليد الصور (SDXL):</label>  
+
+                    <input type="text" name="image_gen_channel" value="${config.image_gen_channel}" style="width:100%; margin: 10px 0;">  
+
+                    <label>ID قناة إزالة الخلفية:</label>  
+
+                    <input type="text" name="bg_remove_channel" value="${config.bg_remove_channel}" style="width:100%; margin: 10px 0;">  
+
+                    <label>ID قناة تنزيل الفيديوهات:</label>  
+
+                    <input type="text" name="video_dl_channel" value="${config.video_dl_channel}" style="width:100%; margin: 10px 0;">  
+
+                    <button type="submit" style="background: #7289da; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 5px;">حفظ الإعدادات</button>
+                </form>
+            </div>
+        </body>
+        </html>
+    `);
 });
 
 app.post('/save', (req, res) => {
-  CARDS_CONFIG = {
-    IMAGES_CHANNEL_ID: req.body.IMAGES_CHANNEL_ID?.trim(),
-    CHAT_CHANNEL_ID: req.body.CHAT_CHANNEL_ID?.trim(),
-    LINKS_CHANNEL_ID: req.body.LINKS_CHANNEL_ID?.trim()
-  };
-
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(CARDS_CONFIG, null, 2));
-  res.redirect('/');
+    config = { ...config, ...req.body };
+    res.redirect('/');
 });
 
-app.listen(PORT, () => console.log("🌐 Dashboard running:", PORT));
+app.listen(port, () => console.log(`Dashboard running on port ${port}`));
 
-// =========================
-// 🤖 DISCORD CLIENT
-// =========================
+// إعدادات البوت
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
-// =========================
-// 🤖 OPENROUTER
-// =========================
-const openrouter = new (await import("openai")).OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: "https://openrouter.ai/api/v1"
-});
+const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 
-// =========================
-// READY
-// =========================
-client.once('ready', () => {
-  console.log(`🤖 Bot online: ${client.user.tag}`);
-});
+async function runReplicate(model, input) {
+    const response = await axios.post(`https://api.replicate.com/v1/predictions`, {
+        version: model,
+        input: input
+    }, {
+        headers: { 'Authorization': `Token ${REPLICATE_API_TOKEN}`, 'Content-Type': 'application/json' }
+    });
 
-// =========================
-// MESSAGE HANDLER
+    let prediction = response.data;
+    while (prediction.status !== 'succeeded' && prediction.status !== 'failed') {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        const check = await axios.get(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
+            headers: { 'Authorization': `Token ${REPLICATE_API_TOKEN}` }
+        });
+        prediction = check.data;
+    }
+    return prediction.output;
+}
+
 client.on('messageCreate', async (message) => {
-  if (message.author.bot) return;
+    if (message.author.bot) return;
+    const channelId = message.channel.id;
 
-  const channelId = message.channel.id;
-
-  // ========== حماية طول الرسائل ==========
-  const safeReply = async (text) => {
-    if (!text) return message.reply("❌ لا يوجد رد");
-
-    const chunks = [];
-    for (let i = 0; i < text.length; i += 1900) {
-      chunks.push(text.substring(i, i + 1900));
+    // 1. الدردشة (Llama 3)
+    if (channelId === config.chat_channel) {
+        message.channel.sendTyping();
+        try {
+            const output = await runReplicate("7119221d9b1a4369408092283e18f2f458e046a624f2165e3863d043f656221c", { prompt: message.content });
+            message.reply(output.join(""));
+        } catch (e) { message.reply("خطأ في الدردشة."); }
     }
 
-    for (const chunk of chunks) {
-      await message.channel.send(chunk);
-    }
-  };
-
-  // ========== رفع صورة ==========
-  const imageUrl = message.attachments.first()?.url;
-
-  // =======================
-  // 🖼️ IMAGES CARD
-  // =======================
-  if (
-    CARDS_CONFIG.IMAGES_CHANNEL_ID &&
-    channelId === CARDS_CONFIG.IMAGES_CHANNEL_ID
-  ) {
-
-    // ❌ إزالة الخلفية
-    if (message.content.includes("ازالة خلفية") && imageUrl) {
-      try {
-        const res = await axios.post(
-          "https://api.remove.bg/v1.0/removebg",
-          { image_url: imageUrl, size: "auto" },
-          {
-            headers: { "X-Api-Key": process.env.REMOVE_BG_KEY },
-            responseType: "arraybuffer",
-          }
-        );
-
-        return message.reply({
-          files: [new AttachmentBuilder(Buffer.from(res.data), { name: "no-bg.png" })],
-        });
-
-      } catch (e) {
-        return message.reply("❌ فشل إزالة الخلفية");
-      }
+    // 2. توليد الصور (SDXL)
+    else if (channelId === config.image_gen_channel) {
+        message.channel.sendTyping();
+        try {
+            const output = await runReplicate("7762fd0e230408d3c7903e98199d75bee3f7930563d3264025bcb1a7353e8a73", { prompt: message.content });
+            message.reply(output[0]);
+        } catch (e) { message.reply("خطأ في توليد الصورة."); }
     }
 
-    // ✨ تحسين صورة (HuggingFace)
-    if (message.content.includes("تحسين") && imageUrl) {
-      try {
-        const res = await axios.post(
-          "https://api-inference.huggingface.co/models/ai-forever/Real-ESRGAN",
-          { inputs: imageUrl },
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.HF_API_KEY}`,
-            },
-            responseType: "arraybuffer",
-          }
-        );
-
-        return message.reply({
-          files: [new AttachmentBuilder(Buffer.from(res.data), { name: "up.png" })],
-        });
-
-      } catch (e) {
-        return message.reply("❌ فشل التحسين");
-      }
-    }
-
-    // 🎨 توليد صورة (نص)
-    if (message.content.startsWith("انشئ صورة")) {
-      const prompt = message.content.replace("انشئ صورة", "").trim();
-      if (!prompt) return message.reply("اكتب وصف الصورة");
-
-      try {
-        const res = await axios.post(
-          "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1",
-          { inputs: prompt },
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.HF_API_KEY}`,
-            },
-            responseType: "arraybuffer",
-          }
-        );
-
-        return message.reply({
-          files: [new AttachmentBuilder(Buffer.from(res.data), { name: "img.png" })],
-        });
-
-      } catch (e) {
-        return message.reply("❌ فشل توليد الصورة");
-      }
-    }
-  }
-
-  // =======================
-  // 💬 CHAT CARD
-  // =======================
-  if (
-    CARDS_CONFIG.CHAT_CHANNEL_ID &&
-    channelId === CARDS_CONFIG.CHAT_CHANNEL_ID
-  ) {
-    try {
-      const res = await openrouter.chat.completions.create({
-        model: "openrouter/free",
-        messages: [{ role: "user", content: message.content }],
-      });
-
-      const reply = res.choices?.[0]?.message?.content;
-      return safeReply(reply);
-
-    } catch (e) {
-      return message.reply("❌ خطأ بالدردشة");
-    }
-  }
-
-  // =======================
-  // 📥 LINKS CARD
-  // =======================
-  if (
-    CARDS_CONFIG.LINKS_CHANNEL_ID &&
-    channelId === CARDS_CONFIG.LINKS_CHANNEL_ID
-  ) {
-
-    const url = message.content.match(/https?:\/\/[^\s]+/);
-    if (!url) return;
-
-    try {
-      const res = await axios.post(
-        "https://api.cobalt.tools/api/json",
-        { url: url[0], vQuality: "720" },
-        {
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
+    // 3. إزالة الخلفية
+    else if (channelId === config.bg_remove_channel) {
+        if (message.attachments.size > 0) {
+            message.channel.sendTyping();
+            try {
+                const output = await runReplicate("95fcc2a26d773517c1d770393985ae067a65239e48719875a6c118b9b392261d", { image: message.attachments.first().url });
+                message.reply(output);
+            } catch (e) { message.reply("خطأ في إزالة الخلفية."); }
         }
-      );
-
-      const video = res.data?.url;
-      if (!video) return message.reply("❌ ما قدرنا نجيب الرابط");
-
-      return message.channel.send(`📥 الرابط:\n${video}`);
-
-    } catch (e) {
-      return message.reply("❌ فشل التحميل");
     }
-  }
+
+    // 4. تنزيل الفيديوهات
+    else if (channelId === config.video_dl_channel) {
+        if (message.content.includes('http')) {
+            message.channel.sendTyping();
+            const filePath = path.join(__dirname, `video_${Date.now()}.mp4`);
+            exec(`yt-dlp -o "${filePath}" "${message.content}"`, (err) => {
+                if (err) return message.reply("فشل التنزيل.");
+                message.reply({ files: [new AttachmentBuilder(filePath)] }).then(() => fs.unlinkSync(filePath));
+            });
+        }
+    }
 });
 
-// =========================
-// LOGIN
-// =========================
 client.login(process.env.DISCORD_TOKEN);
