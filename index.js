@@ -256,3 +256,13 @@ client.on('messageCreate', async (message) => {
   }
 
 }); // إغلاق client.on('messageCreate')
+const TOKEN = process.env.DISCORD_TOKEN;
+
+if (TOKEN && TOKEN.trim() !== "") {
+    console.log("🔄 جاري محاولة تسجيل الدخول باستخدام التوكن المتوفر...");
+    client.login(TOKEN.trim()).catch(err => {
+        console.error("❌ فشل تسجيل دخول البوت! تأكد من صحة الصلاحيات والتوكن:", err.message);
+    });
+} else {
+    console.error("❌ خطأ قاتل: لم يتم العثور على قيمة DISCORD_TOKEN. تأكد من إضافتها في إعدادات البيئة على Render.");
+}
