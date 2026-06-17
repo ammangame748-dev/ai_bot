@@ -1,231 +1,119 @@
-import "dotenv/config";
-import { Client, GatewayIntentBits, AttachmentBuilder } from "discord.js";
-import express from "express";
-import axios from "axios";
-import FormData from "form-data";
-import fs from "fs";
+import { Client, GatewayIntentBits, AttachmentBuilder } from 'discord.js';
+import { OpenAI } from 'openai';
+import express from 'express';
+import axios from 'axios';
+import fs from 'fs';
 
-/* ================= SAFE REPLY FUNCTION ================= */
-function safeReply(message, text) {
-  if (!text) return;
-  const max = 3900;
-  if (text.length > max) {
-    text = text.slice(0, max) + "\n\n... (cut)";
-  }
-  return message.reply(text);
-}
-
-/* ================= SETTINGS MANAGER (DATABASE) ================= */
-const SETTINGS_FILE = "./bot_settings.json";
-let botSettings = {
-  ai_room: "",
-  vision_room: "",
-  bg_room: "",
-  download_room: ""
-};
-
-if (fs.existsSync(SETTINGS_FILE)) {
-  try {
-    botSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
-  } catch (e) {
-    console.log("Creating new settings file");
-  }
-}
-
-function saveSettings() {
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(botSettings, null, 2));
-}
-
-/* ================= SERVER & DASHBOARD ================= */
+// 1. إعداد خادم الويب (Express) وتأمين حفظ البيانات
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const PORT = process.env.PORT || 3000;
 
-app.get("/", (req, res) => {
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+
+const CONFIG_FILE = './cards_config.json';
+let CARDS_CONFIG = { IMAGES_CHANNEL_ID: "", CHAT_CHANNEL_ID: "", LINKS_CHANNEL_ID: "" };
+
+if (fs.existsSync(CONFIG_FILE)) {
+  try {
+    CARDS_CONFIG = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+  } catch (e) {
+    console.log("⚠️ فشل قراءة ملف الإعدادات القديم.");
+  }
+}
+
+// واجهة الداش بورد
+app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
     <head>
-      <meta charset="UTF-8">
-      <title>لوحة التحكم</title>
-      <style>
-        body { font-family: sans-serif; background-color: #0f111a; color: #fff; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .container { max-width: 800px; width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 20px; }
-        .card { background-color: #161925; border: 1px solid #23273a; border-radius: 10px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        .card h3 { margin-top: 0; color: #5865F2; }
-        input { background-color: #0f111a; border: 1px solid #23273a; padding: 10px; border-radius: 6px; color: #fff; width: 90%; }
-        .btn { grid-column: 1 / -1; background-color: #5865F2; color: #fff; padding: 15px; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; font-weight: bold; margin-top: 10px; }
-        .btn:hover { background-color: #4752c4; }
-      </style>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>لوحة تحكم بوت الذكاء الاصطناعي المتكامل</title>
+        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+        <style>
+            body { font-family: 'Tajawal', sans-serif; background-color: #0e1118; color: #e2e8f0; margin: 0; padding: 40px 20px; display: flex; flex-direction: column; align-items: center; }
+            h1 { color: #5865F2; margin-bottom: 10px; font-size: 2.2rem; }
+            p.subtitle { color: #94a3b8; margin-bottom: 40px; font-size: 1.1rem; }
+            .container { display: flex; flex-wrap: wrap; gap: 25px; justify-content: center; max-width: 1200px; width: 100%; }
+            .card { background: #161b26; border: 2px solid #232a3c; border-radius: 16px; padding: 30px; width: 320px; box-shadow: 0 10px 20px rgba(0,0,0,0.3); transition: transform 0.3s, border-color 0.3s; display: flex; flex-direction: column; justify-content: space-between; }
+            .card:hover { transform: translateY(-5px); border-color: #5865F2; }
+            .card-title { font-size: 1.4rem; font-weight: bold; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+            .card-desc { color: #94a3b8; font-size: 0.95rem; line-height: 1.6; margin-bottom: 25px; min-height: 70px; }
+            .form-group { margin-bottom: 20px; }
+            label { display: block; margin-bottom: 8px; font-size: 0.9rem; color: #cbd5e1; }
+            input[type="text"] { width: 100%; padding: 12px; background: #0f131a; border: 1px solid #2d3748; border-radius: 8px; color: #fff; font-size: 1rem; box-sizing: border-box; text-align: center; }
+            input[type="text"]:focus { border-color: #5865F2; outline: none; }
+            button { width: 100%; background: #5865F2; color: white; border: none; padding: 12px; font-size: 1rem; font-weight: bold; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+            button:hover { background: #4752c4; }
+            .alert { background: #10b981; color: white; padding: 15px 30px; border-radius: 8px; margin-bottom: 25px; display: none; font-weight: bold; }
+        </style>
     </head>
     <body>
-      <h1>🤖 لوحة تحكم البوت الاحترافية</h1>
-      <form action="/save" method="POST" style="width: 100%; max-width: 800px; display: contents;">
-        <div class="container">
-          <div class="card">
-            <h3>🤖 بطاقة الذكاء الاصطناعي</h3>
-            <p>أدخل ID الروم المخصصة لأمر (سؤال):</p>
-            <input type="text" name="ai_room" value="${botSettings.ai_room}">
-          </div>
-          <div class="card">
-            <h3>🖼️ بطاقة تحليل الصور</h3>
-            <p>أدخل ID الروم المخصصة لأمر (حلل):</p>
-            <input type="text" name="vision_room" value="${botSettings.vision_room}">
-          </div>
-          <div class="card">
-            <h3>✂️ بطاقة إزالة الخلفية</h3>
-            <p>أدخل ID الروم المخصصة لأمر (ازالة خلفية):</p>
-            <input type="text" name="bg_room" value="${botSettings.bg_room}">
-          </div>
-          <div class="card">
-            <h3>📥 بطاقة تحميل الفيديوهات</h3>
-            <p>أدخل ID الروم المخصصة للروابط المباشرة:</p>
-            <input type="text" name="download_room" value="${botSettings.download_room}">
-          </div>
-          <button type="submit" class="btn">💾 حفظ الإعدادات وتحديث البوت</button>
-        </div>
-      </form>
+        <h1>🤖 لوحة تحكم بوت الذكاء الاصطناعي الشامل</h1>
+        <p class="subtitle">قم بتعيين آيدي الرومات لتفعيل البطاقات والميزات فوراً داخل ديسكورد</p>
+        <div id="successAlert" class="alert">✅ تم حفظ وتحديث الرومات بنجاح وبشكل فوري!</div>
+        <form action="/save-config" method="POST" id="configForm">
+            <div class="container">
+                <div class="card">
+                    <div>
+                        <div class="card-title" style="color: #ec4899;">🖼️ بطاقة الصور والتعديل</div>
+                        <div class="card-desc">توليد الصور عبر الذكاء الاصطناعي (أمر: انشئ صورة [الوصف]) وإزالة خلفية أي صورة مرفوعة (اكتب: ازالة خلفية).</div>
+                    </div>
+                    <div class="form-group">
+                        <label>ID روم الصور والتعديل:</label>
+                        <input type="text" name="IMAGES_CHANNEL_ID" value="${CARDS_CONFIG.IMAGES_CHANNEL_ID}" placeholder="أدخل ID الروم هنا">
+                    </div>
+                </div>
+                <div class="card">
+                    <div>
+                        <div class="card-title" style="color: #3b82f6;">💬 بطاقة الأسئلة والدردشة</div>
+                        <div class="card-desc">روم دردشة تفاعلية مفتوحة وسريعة جداً مع ذكاء OpenRouter الخارق المتواصل بدون حدود يومية.</div>
+                    </div>
+                    <div class="form-group">
+                        <label>ID روم الدردشة والأسئلة:</label>
+                        <input type="text" name="CHAT_CHANNEL_ID" value="${CARDS_CONFIG.CHAT_CHANNEL_ID}" placeholder="أدخل ID الروم هنا">
+                    </div>
+                </div>
+                <div class="card">
+                    <div>
+                        <div class="card-title" style="color: #10b981;">📥 بطاقة تحميل الروابط</div>
+                        <div class="card-desc">تحميل الفيديوهات والميديا تلقائياً من روابط إنستغرام عبر السكرابر المدمج.</div>
+                    </div>
+                    <div class="form-group">
+                        <label>ID روم تحميل الروابط:</label>
+                        <input type="text" name="LINKS_CHANNEL_ID" value="${CARDS_CONFIG.LINKS_CHANNEL_ID}" placeholder="أدخل ID الروم هنا">
+                    </div>
+                </div>
+            </div>
+            <button type="submit" style="margin-top: 30px; max-width: 400px; display: block; margin-left: auto; margin-right: auto; font-size: 1.2rem; padding: 15px;">💾 حفظ وتطبيق الإعدادات الحالية</button>
+        </form>
+        <script>
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('saved') === 'true') {
+                document.getElementById('successAlert').style.display = 'block';
+                setTimeout(() => { document.getElementById('successAlert').style.display = 'none'; }, 4000);
+            }
+        </script>
     </body>
     </html>
-  `);
+    `);
 });
 
-app.post("/save", (req, res) => {
-  botSettings.ai_room = req.body.ai_room.trim();
-  botSettings.vision_room = req.body.vision_room.trim();
-  botSettings.bg_room = req.body.bg_room.trim();
-  botSettings.download_room = req.body.download_room.trim();
-  saveSettings();
-  res.redirect("/");
+app.post('/save-config', (req, res) => {
+  CARDS_CONFIG.IMAGES_CHANNEL_ID = req.body.IMAGES_CHANNEL_ID.trim();
+  CARDS_CONFIG.CHAT_CHANNEL_ID = req.body.CHAT_CHANNEL_ID.trim();
+  CARDS_CONFIG.LINKS_CHANNEL_ID = req.body.LINKS_CHANNEL_ID.trim();
+
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(CARDS_CONFIG, null, 2));
+  res.redirect('/?saved=true');
 });
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("🌐 Dashboard running");
+app.listen(PORT, () => {
+  console.log(`🌐 الداش بورد تعمل على البورت: ${PORT}`);
 });
-
-/* ================= MEMORY & RATE LIMIT ================= */
-const memory = new Map();
-const cooldown = new Map();
-function rateLimit(id) {
-  const now = Date.now();
-  const last = cooldown.get(id) || 0;
-  if (now - last < 2500) return false;
-  cooldown.set(id, now);
-  return true;
-}
-
-/* ================= AI FUNCTION ================= */
-async function askAI(text, userId) {
-  const history = memory.get(userId) || [];
-  try {
-    const res = await axios.post(
-      "https://openrouter.ai",
-      {
-        model: "google/gemini-flash-1.5",
-        messages: [...history, { role: "user", content: text }]
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        timeout: 20000
-      }
-    );
-    const reply = res.data?.choices?.[0]?.message?.content || "لم أتمكن من الحصول على رد.";
-    history.push({ role: "user", content: text }, { role: "assistant", content: reply });
-    if (history.length > 10) history.splice(0, 2);
-    memory.set(userId, history);
-    return reply;
-  } catch (err) {
-    console.error("AI ERROR:", err?.response?.data || err.message);
-    return "❌ صار خطأ في الذكاء الاصطناعي";
-  }
-}
-
-/* ================= REMOVE BG FUNCTION ================= */
-async function removeBG(url) {
-  const form = new FormData();
-  form.append("image_url", url);
-  form.append("size", "auto");
-  const res = await axios.post("https://remove.bg", form, {
-    headers: { "X-Api-Key": process.env.REMOVE_BG_KEY, ...form.getHeaders() },
-    responseType: "arraybuffer"
-  });
-  return Buffer.from(res.data);
-}
-async function downloadVideo(url) {
-  // استخدام خوادم Cobalt عامة ومستقرة
-  const apis = [
-    "https://api.cobalt.tools/api/json", 
-    "https://da.gd"
-  ];
-
-  for (const api of apis) {
-    try {
-      const res = await axios.post(
-        api,
-        { 
-          url: url,
-          videoQuality: "720", // تحديد جودة افتراضية تضمن نجاح الطلب
-          filenamePattern: "basic"
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            // ترويسة ضرورية جداً لمنع حظر الحماية (Cloudflare / Bot Protection)
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-          },
-          timeout: 15000 // 15 ثانية كافية قبل الانتقال للسيرفر البديل
-        }
-      );
-
-      // بعض سيرفرات Cobalt تُرجع الرابط في حقل text أو url حسب نوع الميديا
-      const videoUrl = res.data?.url || res.data?.text;
-      
-      if (videoUrl && videoUrl.startsWith('http')) {
-        return videoUrl;
-      }
-
-    } catch (err) {
-      // طباعة تفاصيل الخطأ القادم من السيرفر لمعرفة السبب بدقة
-      const status = err.response?.status ? `[Status ${err.response.status}]` : '';
-      console.error(`API FAILED: ${api} ${status}`, err.response?.data?.text || err.message);
-      continue; // الانتقال تلقائياً للسيرفر التالي في المصفوفة
-    }
-  }
-
-  return null; // تعيد null إذا فشلت جميع السيرفرات
-}
-
-
-/* ================= IMAGE ANALYSIS FUNCTION ================= */
-async function analyzeImage(url) {
-  const res = await axios.post(
-    "https://openrouter.ai",
-    {
-      model: "google/gemini-flash-1.5-8b",
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "حلل الصورة بالتفصيل باللغة العربية" },
-            { type: "image_url", image_url: { url: url } }
-          ]
-        }
-      ]
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
-  return res.data?.choices?.[0]?.message?.content || "لم أتمكن من تحليل الصورة.";
-}
-/* ================= DISCORD CLIENT LOGIC ================= */
+// 2. إعداد ديسكورد وربطه بالكامل بـ OpenRouter بناءً على إعداداتك
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -234,84 +122,136 @@ const client = new Client({
   ]
 });
 
-client.once("ready", () => {
-  console.log(`🤖 Logged in as ${client.user.tag}`);
+// إعداد اتصال OpenRouter للدردشة والصور بدلاً من جروق وأوبن إيه آي
+const openrouter = new OpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: "https://openrouter.ai/api/v1"
 });
 
-client.on("messageCreate", async (message) => {
+client.once('ready', () => {
+  console.log(`🤖 البوت متصل عبر OpenRouter باسم: ${client.user.tag}`);
+});
+
+client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  const msg = message.content;
-  const userId = message.author.id;
   const channelId = message.channel.id;
 
-  if (!rateLimit(userId + channelId)) {
-    return message.reply("⏳ Slow down شوي");
-  }
+  // 🃏 [البطاقة الأولى]: الصور والتعديل
+  if (CARDS_CONFIG.IMAGES_CHANNEL_ID && channelId === CARDS_CONFIG.IMAGES_CHANNEL_ID) {
 
-  try {
-    /* 🤖 AI - ميزة السؤال الذكي */
-    if (msg.startsWith("سؤال") && botSettings.ai_room && channelId === botSettings.ai_room) {
-      const text = msg.replace("سؤال", "").trim();
-      if (!text) return message.reply("❌ اكتب سؤالك بعد كلمة سؤال");
+    if (message.attachments.size > 0 && message.content.includes('ازالة خلفية')) {
+      await message.channel.sendTyping();
+      const imageUrl = message.attachments.first().url;
 
-      await message.channel.sendTyping(); 
-      const reply = await askAI(text, userId);
-      return safeReply(message, reply);
-    }
-
-    /* 🖼️ IMAGE ANALYSIS - ميزة تحليل الصور المحدثة */
-    if (msg.includes("حلل") && message.attachments.size > 0 && botSettings.vision_room && channelId === botSettings.vision_room) {
       try {
-        await message.channel.sendTyping();
-        const img = message.attachments.first().url;
-        const result = await analyzeImage(img);
-        return message.reply(result);
-      } catch (err) {
-        console.error("VISION ERROR:", err);
-        return message.reply("❌ فشل تحليل الصورة، تأكد من الـ API Key الخاص بك.");
-      }
-    }
+        const response = await axios.post(
+          'https://api.remove.bg/v1.0/removebg',
+          { image_url: imageUrl, size: 'auto' },
+          {
+            headers: { 'X-API-Key': process.env.REMOVE_BG_KEY },
+            responseType: 'arraybuffer'
+          }
+        );
 
-    /* ✂️ REMOVE BG - ميزة قص وإزالة خلفية الصور */
-    if (msg.includes("ازالة خلفية") && message.attachments.size > 0 && botSettings.bg_room && channelId === botSettings.bg_room) {
-      try {
-        const img = message.attachments.first().url;
-        await message.channel.sendTyping();
-        const buffer = await removeBG(img);
+        const buffer = Buffer.from(response.data, 'binary');
+        const attachment = new AttachmentBuilder(buffer, { name: 'no-bg.png' });
+
         return message.reply({
-          files: [new AttachmentBuilder(buffer, { name: "no-bg.png" })]
+          content: "✨ تم إزالة الخلفية بنجاح:",
+          files: [attachment]
         });
-      } catch (err) {
-        console.error("BG ERROR:", err);
-        return message.reply("❌ فشل إزالة الخلفية، تحقق من رصيد مفتاح remove.bg.");
+      } catch (error) {
+        console.error(error);
+        return message.reply("❌ خطأ في إزالة الخلفية، تأكد من قيمة REMOVE_BG_KEY");
       }
     }
 
-    /* 📥 VIDEO DOWNLOAD - ميزة التحميل المباشر للروابط */
-    if (/instagram|tiktok|twitter|x\.com/.test(msg) && botSettings.download_room && channelId === botSettings.download_room) {
+    if (message.content.startsWith('انشئ صورة')) {
+      await message.channel.sendTyping();
+      const prompt = message.content.replace('انشئ صورة', '').trim();
+      if (!prompt) return message.reply("اكتب وصف الصورة");
+
       try {
-        await message.channel.sendTyping();
-        const video = await downloadVideo(msg);
-        if (!video) {
-          return message.reply("❌ ما قدرت أحمل الفيديو");
-        }
-        return message.reply(video);
-      } catch (err) {
-        console.error("DOWNLOAD ERROR:", err);
-        return message.reply("❌ صار خطأ أثناء تحميل الفيديو من السيرفر.");
+        // توليد الصور عبر OpenRouter باستخدام نموذج مجاني عالي الجودة وسريع
+        const imageResponse = await openrouter.images.generate({
+          model: "bytedance/sdxl-lightning",
+          prompt,
+          n: 1,
+        });
+
+        const finalImgUrl = imageResponse.data[0]?.url || imageResponse.data?.url;
+        return message.reply(finalImgUrl || "❌ لم نتمكن من الحصول على رابط الصورة المباشر.");
+
+      } catch (error) {
+        console.error(error);
+        return message.reply("❌ فشل إنشاء الصورة من OpenRouter.");
       }
     }
-
-  } catch (err) {
-    console.error("GLOBAL ERROR:", err);
-    return message.reply("❌ صار خطأ داخل النظام العام.");
   }
-});
 
-/* ================= BOT LOGIN ================= */
-if (!process.env.DISCORD_TOKEN) {
-  console.log("❌ Missing token");
-} else {
-  client.login(process.env.DISCORD_TOKEN);
-}
+  // 🃏 [البطاقة الثانية]: الدردشة الذكية اللانهائية (OpenRouter)
+  if (CARDS_CONFIG.CHAT_CHANNEL_ID && channelId === CARDS_CONFIG.CHAT_CHANNEL_ID) {
+    await message.channel.sendTyping();
+
+    try {
+      const chatCompletion = await openrouter.chat.completions.create({
+        // استخدام موديل متطور ومجاني تماماً وبدون حدود ضيقة من ميتا لاما
+        model: "meta-llama/llama-3-8b-instruct:free",
+        messages: [{ role: "user", content: message.content }],
+      });
+
+      return message.reply(chatCompletion.choices[0].message.content || "❌ لم يصل رد من الذكاء الاصطناعي.");
+    } catch (error) {
+      console.error(error);
+      return message.reply("❌ خطأ في معالجة الرد عبر OpenRouter");
+    }
+  }
+  // 🃏 [البطاقة الثالثة]: تحميل الروابط
+  if (CARDS_CONFIG.LINKS_CHANNEL_ID && channelId === CARDS_CONFIG.LINKS_CHANNEL_ID) {
+
+    const urlRegex = /(instagram.com|tiktok.com|twitter.com|x.com|facebook.com|youtube.com|youtu.be)/i;
+
+    if (!urlRegex.test(message.content)) return;
+
+    await message.channel.sendTyping();
+
+    const matchedUrls = message.content.match(/https?:\/\/[^\s]+/g);
+    if (!matchedUrls) return;
+
+    try {
+
+      const response = await axios.post(
+        'https://cobalt.moe/api/json',
+        {
+          url: matchedUrls[0],
+          vQuality: "720",
+          filenamePattern: "basic"
+        },
+        {
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          }
+        }
+      );
+
+      const videoUrl = response.data?.url;
+
+      if (!videoUrl) {
+        return message.reply("❌ عذراً، لم نتمكن من استخراج رابط التحميل المباشر من هذا الموقع.");
+      }
+
+      await message.channel.send({ content: `📥 **تم تحميل الميديا بنجاح:**\n${videoUrl}` });
+      return await message.delete().catch(() => { });
+
+
+    } catch (error) {
+      console.error("Cobalt Error:", error.response?.data || error.message);
+      return message.reply("❌ فشل تحميل الميديا. قد يكون الفيديو خاصاً أو السيرفر مضغوطاً حالياً.");
+    }
+
+  }
+
+}); // إغلاق client.on('messageCreate')
