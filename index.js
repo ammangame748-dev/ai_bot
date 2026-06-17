@@ -198,7 +198,7 @@ client.on('messageCreate', async (message) => {
     try {
       const chatCompletion = await openrouter.chat.completions.create({
         // استخدام موديل متطور ومجاني تماماً وبدون حدود ضيقة من ميتا لاما
-        model: "meta-llama/llama-3-8b-instruct:free",
+        model: "google/gemini-2.5-flash:free",
         messages: [{ role: "user", content: message.content }],
       });
 
@@ -223,7 +223,8 @@ client.on('messageCreate', async (message) => {
     try {
 
       const response = await axios.post(
-        'https://cobalt.moe/api/json',
+     'https://api.cobalt.tools/api/json',
+
         {
           url: matchedUrls[0],
           vQuality: "720",
