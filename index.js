@@ -84,88 +84,81 @@ client.once('ready', () => {
 
 // =========================
 // MESSAGE HANDLER
-// =========================
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const channelId = message.channel.id;
-  const attachment = message.attachments.first();
-  const imageUrl = attachment?.url;
 
-  // =========================
-  // 🖼 IMAGE SYSTEM
-  // =========================
-  if (channelId === CARDS_CONFIG.IMAGES_CHANNEL_ID) {
+  // ========== حماية طول الرسائل ==========
+  const safeReply = async (text) => {
+    if (!text) return message.reply("❌ لا يوجد رد");
 
-    // Remove background
-    if (attachment && message.content.includes("ازالة خلفية")) {
+    const chunks = [];
+    for (let i = 0; i < text.length; i += 1900) {
+      chunks.push(text.substring(i, i + 1900));
+    }
+
+    for (const chunk of chunks) {
+      await message.channel.send(chunk);
+    }
+  };
+
+  // ========== رفع صورة ==========
+  const imageUrl = message.attachments.first()?.url;
+
+  // =======================
+  // 🖼️ IMAGES CARD
+  // =======================
+  if (
+    CARDS_CONFIG.IMAGES_CHANNEL_ID &&
+    channelId === CARDS_CONFIG.IMAGES_CHANNEL_ID
+  ) {
+
+    // ❌ إزالة الخلفية
+    if (message.content.includes("ازالة خلفية") && imageUrl) {
       try {
         const res = await axios.post(
           "https://api.remove.bg/v1.0/removebg",
           { image_url: imageUrl, size: "auto" },
           {
-            headers: { "X-API-Key": process.env.REMOVE_BG_KEY },
-            responseType: "arraybuffer"
+            headers: { "X-Api-Key": process.env.REMOVE_BG_KEY },
+            responseType: "arraybuffer",
           }
         );
 
         return message.reply({
-          files: [new AttachmentBuilder(Buffer.from(res.data), { name: "no-bg.png" })]
+          files: [new AttachmentBuilder(Buffer.from(res.data), { name: "no-bg.png" })],
         });
-      } catch {
+
+      } catch (e) {
         return message.reply("❌ فشل إزالة الخلفية");
       }
     }
 
-    // AI Upscale (HuggingFace)
-    if (attachment && message.content.includes("تحسين")) {
+    // ✨ تحسين صورة (HuggingFace)
+    if (message.content.includes("تحسين") && imageUrl) {
       try {
         const res = await axios.post(
           "https://api-inference.huggingface.co/models/ai-forever/Real-ESRGAN",
           { inputs: imageUrl },
           {
-            headers: { Authorization: `Bearer ${process.env.HF_API_KEY}` },
+            headers: {
+              Authorization: `Bearer ${process.env.HF_API_KEY}`,
+            },
             responseType: "arraybuffer",
-            validateStatus: () => true
           }
         );
 
-        if (res.headers["content-type"]?.includes("application/json"))
-          return message.reply("⏳ النموذج قيد التشغيل");
-
         return message.reply({
-          files: [new AttachmentBuilder(Buffer.from(res.data), { name: "up.png" })]
+          files: [new AttachmentBuilder(Buffer.from(res.data), { name: "up.png" })],
         });
-      } catch {
+
+      } catch (e) {
         return message.reply("❌ فشل التحسين");
       }
     }
 
-    // Color / Edit
-    if (attachment && message.content.includes("تلوين")) {
-      try {
-        const res = await axios.post(
-          "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1",
-          { inputs: imageUrl },
-          {
-            headers: { Authorization: `Bearer ${process.env.HF_API_KEY}` },
-            responseType: "arraybuffer",
-            validateStatus: () => true
-          }
-        );
-
-        if (res.headers["content-type"]?.includes("application/json"))
-          return message.reply("⏳ جاري المعالجة");
-
-        return message.reply({
-          files: [new AttachmentBuilder(Buffer.from(res.data), { name: "color.png" })]
-        });
-      } catch {
-        return message.reply("❌ فشل التلوين");
-      }
-    }
-
-    // Text to Image
+    // 🎨 توليد صورة (نص)
     if (message.content.startsWith("انشئ صورة")) {
       const prompt = message.content.replace("انشئ صورة", "").trim();
       if (!prompt) return message.reply("اكتب وصف الصورة");
@@ -175,55 +168,73 @@ client.on('messageCreate', async (message) => {
           "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1",
           { inputs: prompt },
           {
-            headers: { Authorization: `Bearer ${process.env.HF_API_KEY}` },
+            headers: {
+              Authorization: `Bearer ${process.env.HF_API_KEY}`,
+            },
             responseType: "arraybuffer",
-            validateStatus: () => true
           }
         );
 
         return message.reply({
-          files: [new AttachmentBuilder(Buffer.from(res.data), { name: "img.png" })]
+          files: [new AttachmentBuilder(Buffer.from(res.data), { name: "img.png" })],
         });
-      } catch {
-        return message.reply("❌ فشل التوليد");
+
+      } catch (e) {
+        return message.reply("❌ فشل توليد الصورة");
       }
     }
   }
 
-  // =========================
-  // 💬 CHAT
-  // =========================
-  if (channelId === CARDS_CONFIG.CHAT_CHANNEL_ID) {
+  // =======================
+  // 💬 CHAT CARD
+  // =======================
+  if (
+    CARDS_CONFIG.CHAT_CHANNEL_ID &&
+    channelId === CARDS_CONFIG.CHAT_CHANNEL_ID
+  ) {
     try {
       const res = await openrouter.chat.completions.create({
         model: "openrouter/free",
-        messages: [{ role: "user", content: message.content }]
+        messages: [{ role: "user", content: message.content }],
       });
 
-      return message.reply(res.choices[0].message.content);
-    } catch {
-      return message.reply("❌ خطأ في الدردشة");
+      const reply = res.choices?.[0]?.message?.content;
+      return safeReply(reply);
+
+    } catch (e) {
+      return message.reply("❌ خطأ بالدردشة");
     }
   }
 
-  // =========================
-  // 📥 DOWNLOAD
-  // =========================
-  if (channelId === CARDS_CONFIG.LINKS_CHANNEL_ID) {
-    const match = message.content.match(/https?:\/\/[^\s]+/);
-    if (!match) return;
+  // =======================
+  // 📥 LINKS CARD
+  // =======================
+  if (
+    CARDS_CONFIG.LINKS_CHANNEL_ID &&
+    channelId === CARDS_CONFIG.LINKS_CHANNEL_ID
+  ) {
+
+    const url = message.content.match(/https?:\/\/[^\s]+/);
+    if (!url) return;
 
     try {
       const res = await axios.post(
         "https://api.cobalt.tools/api/json",
-        { url: match[0], vQuality: "720" },
-        { headers: { "Content-Type": "application/json" } }
+        { url: url[0], vQuality: "720" },
+        {
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+        }
       );
 
-      if (!res.data?.url) return message.reply("❌ لم يتم استخراج الرابط");
+      const video = res.data?.url;
+      if (!video) return message.reply("❌ ما قدرنا نجيب الرابط");
 
-      return message.reply(`📥 ${res.data.url}`);
-    } catch {
+      return message.channel.send(`📥 الرابط:\n${video}`);
+
+    } catch (e) {
       return message.reply("❌ فشل التحميل");
     }
   }
