@@ -1,4 +1,5 @@
 import { Client, GatewayIntentBits, AttachmentBuilder } from 'discord.js';
+import 'dotenv/config'; 
 import { OpenAI } from 'openai';
 import express from 'express';
 import axios from 'axios';
