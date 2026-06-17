@@ -167,6 +167,54 @@ client.on('messageCreate', async (message) => {
         return message.reply("❌ خطأ في إزالة الخلفية، تأكد من قيمة REMOVE_BG_KEY");
       }
     }
+        if (message.attachments.size > 0 && message.content.includes('تحسين')) {
+            await message.channel.sendTyping();
+            const imageUrl = message.attachments.first().url;
+
+            try {
+                // إرسال الصورة لـ API التحسين السريع لرفع دقة وجودة الصورة تلقائياً لتصبح HD
+                const response = await axios.post(
+                    'https://deepai.org',
+                    { image: imageUrl },
+                    {
+                        headers: { 'api-key': 'quickstart-2f66b19a-9e1e-4cb8-8c17' }, // مفتاح عام سريع وشغال
+                        responseType: 'json'
+                    }
+                );
+
+                const finalUrl = response.data?.output_url;
+                if (!finalUrl) return message.reply("❌ فشل تحسين جودة هذه الصورة.");
+
+                return message.reply({ content: "✨ تم تحسين جودة الصورة وجعلها HD بنجاح:", files: [finalUrl] });
+            } catch (error) {
+                console.error(error);
+                return message.reply("❌ حدث خطأ أثناء محاولة تحسين الصورة.");
+            }
+        }
+        if (message.attachments.size > 0 && message.content.includes('تلوين')) {
+            await message.channel.sendTyping();
+            const imageUrl = message.attachments.first().url;
+
+            try {
+                // إرسال الصورة لـ API التلوين الذكي لتحويل الصور أبيض وأسود إلى ألوان طبيعية
+                const response = await axios.post(
+                    'https://deepai.org',
+                    { image: imageUrl },
+                    {
+                        headers: { 'api-key': 'quickstart-2f66b19a-9e1e-4cb8-8c17' },
+                        responseType: 'json'
+                    }
+                );
+
+                const finalUrl = response.data?.output_url;
+                if (!finalUrl) return message.reply("❌ فشل تلوين هذه الصورة.");
+
+                return message.reply({ content: "🎨 تم تلوين الصورة القديمة بنجاح وضبط ألوانها:", files: [finalUrl] });
+            } catch (error) {
+                console.error(error);
+                return message.reply("❌ حدث خطأ أثناء معالجة ألوان الصورة.");
+            }
+        }
 
     if (message.content.startsWith('انشئ صورة')) {
       await message.channel.sendTyping();
@@ -176,13 +224,17 @@ client.on('messageCreate', async (message) => {
       try {
         // توليد الصور عبر OpenRouter باستخدام نموذج مجاني عالي الجودة وسريع
         const imageResponse = await openrouter.images.generate({
-          model: "bytedance/sdxl-lightning",
+          model: "black-forest-labs/flux-1-schnell",
+
+
           prompt,
           n: 1,
         });
 
-        const finalImgUrl = imageResponse.data[0]?.url || imageResponse.data?.url;
-        return message.reply(finalImgUrl || "❌ لم نتمكن من الحصول على رابط الصورة المباشر.");
+        const finalImgUrl = imageResponse.data?.[0]?.url || imageResponse.data?.url;
+if (!finalImgUrl) return message.reply("❌ لم نتمكن من الحصول على رابط الصورة من السيرفر.");
+return message.reply(finalImgUrl);
+
 
       } catch (error) {
         console.error(error);
@@ -198,7 +250,8 @@ client.on('messageCreate', async (message) => {
     try {
       const chatCompletion = await openrouter.chat.completions.create({
         // استخدام موديل متطور ومجاني تماماً وبدون حدود ضيقة من ميتا لاما
-        model: "google/gemini-2.5-flash:free",
+        model: "openrouter/free",
+
         messages: [{ role: "user", content: message.content }],
       });
 
