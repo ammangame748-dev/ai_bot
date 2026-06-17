@@ -167,80 +167,115 @@ client.on('messageCreate', async (message) => {
         return message.reply("❌ خطأ في إزالة الخلفية، تأكد من قيمة REMOVE_BG_KEY");
       }
     }
-        if (message.attachments.size > 0 && message.content.includes('تحسين')) {
-            await message.channel.sendTyping();
-            const imageUrl = message.attachments.first().url;
+if (message.attachments.size > 0 && message.content.includes('تحسين')) {
+  await message.channel.sendTyping();
 
-            try {
-                // إرسال الصورة لـ API التحسين السريع لرفع دقة وجودة الصورة تلقائياً لتصبح HD
-                const response = await axios.post(
-                    'https://deepai.org',
-                    { image: imageUrl },
-                    {
-                        headers: { 'api-key': 'quickstart-2f66b19a-9e1e-4cb8-8c17' }, // مفتاح عام سريع وشغال
-                        responseType: 'json'
-                    }
-                );
+  const imageUrl = message.attachments.first().url;
 
-                const finalUrl = response.data?.output_url;
-                if (!finalUrl) return message.reply("❌ فشل تحسين جودة هذه الصورة.");
+  try {
+    const form = new URLSearchParams();
+    form.append("image", imageUrl);
 
-                return message.reply({ content: "✨ تم تحسين جودة الصورة وجعلها HD بنجاح:", files: [finalUrl] });
-            } catch (error) {
-                console.error(error);
-                return message.reply("❌ حدث خطأ أثناء محاولة تحسين الصورة.");
-            }
+    const response = await axios.post(
+      "https://api.deepai.org/api/waifu2x",
+      form,
+      {
+        headers: {
+          "api-key": process.env.DEEPAI_API_KEY,
+          "Content-Type": "application/x-www-form-urlencoded"
         }
-        if (message.attachments.size > 0 && message.content.includes('تلوين')) {
-            await message.channel.sendTyping();
-            const imageUrl = message.attachments.first().url;
-
-            try {
-                // إرسال الصورة لـ API التلوين الذكي لتحويل الصور أبيض وأسود إلى ألوان طبيعية
-                const response = await axios.post(
-                    'https://deepai.org',
-                    { image: imageUrl },
-                    {
-                        headers: { 'api-key': 'quickstart-2f66b19a-9e1e-4cb8-8c17' },
-                        responseType: 'json'
-                    }
-                );
-
-                const finalUrl = response.data?.output_url;
-                if (!finalUrl) return message.reply("❌ فشل تلوين هذه الصورة.");
-
-                return message.reply({ content: "🎨 تم تلوين الصورة القديمة بنجاح وضبط ألوانها:", files: [finalUrl] });
-            } catch (error) {
-                console.error(error);
-                return message.reply("❌ حدث خطأ أثناء معالجة ألوان الصورة.");
-            }
-        }
-
-    if (message.content.startsWith('انشئ صورة')) {
-      await message.channel.sendTyping();
-      const prompt = message.content.replace('انشئ صورة', '').trim();
-      if (!prompt) return message.reply("اكتب وصف الصورة");
-
-      try {
-        // توليد الصور عبر OpenRouter باستخدام نموذج مجاني عالي الجودة وسريع
-        const imageResponse = await openrouter.images.generate({
-          model: "black-forest-labs/flux-1-schnell",
-
-
-          prompt,
-          n: 1,
-        });
-
-        const finalImgUrl = imageResponse.data?.[0]?.url || imageResponse.data?.url;
-if (!finalImgUrl) return message.reply("❌ لم نتمكن من الحصول على رابط الصورة من السيرفر.");
-return message.reply(finalImgUrl);
-
-
-      } catch (error) {
-        console.error(error);
-        return message.reply("❌ فشل إنشاء الصورة من OpenRouter.");
       }
-    }
+    );
+
+    const finalUrl = response.data?.output_url;
+
+    if (!finalUrl)
+      return message.reply("❌ فشل تحسين الصورة");
+
+    return message.reply({
+      content: "✨ تم تحسين الصورة:",
+      files: [finalUrl]
+    });
+
+  } catch (error) {
+    console.error(error?.response?.data || error);
+    return message.reply("❌ حدث خطأ أثناء تحسين الصورة");
+  }
+
+        }
+       if (message.attachments.size > 0 && message.content.includes('تلوين')) {
+  await message.channel.sendTyping();
+
+  const imageUrl = message.attachments.first().url;
+
+  try {
+    const form = new URLSearchParams();
+    form.append("image", imageUrl);
+
+    const response = await axios.post(
+      "https://api.deepai.org/api/colorizer",
+      form,
+      {
+        headers: {
+          "api-key": process.env.DEEPAI_API_KEY,
+          "Content-Type": "application/x-www-form-urlencoded"
+        }
+      }
+    );
+
+    const finalUrl = response.data?.output_url;
+
+    if (!finalUrl)
+      return message.reply("❌ فشل تلوين الصورة");
+
+    return message.reply({
+      content: "🎨 تم تلوين الصورة بنجاح:",
+      files: [finalUrl]
+    });
+
+  } catch (error) {
+    console.error(error?.response?.data || error);
+    return message.reply("❌ حدث خطأ أثناء تلوين الصورة");
+  }
+
+        }
+
+if (message.content.startsWith('انشئ صورة')) {
+  await message.channel.sendTyping();
+
+  const prompt = message.content.replace('انشئ صورة', '').trim();
+  if (!prompt) return message.reply("اكتب وصف الصورة");
+
+  try {
+    const form = new URLSearchParams();
+    form.append("text", prompt);
+
+    const response = await axios.post(
+      "https://api.deepai.org/api/text2img",
+      form,
+      {
+        headers: {
+          "api-key": process.env.DEEPAI_API_KEY,
+          "Content-Type": "application/x-www-form-urlencoded"
+        }
+      }
+    );
+
+    const finalImgUrl = response.data?.output_url;
+
+    if (!finalImgUrl)
+      return message.reply("❌ ما تم إرجاع صورة من DeepAI");
+
+    return message.reply({
+      content: "🖼️ تم إنشاء الصورة بنجاح:",
+      files: [finalImgUrl]
+    });
+
+  } catch (error) {
+    console.error(error?.response?.data || error);
+    return message.reply("❌ فشل إنشاء الصورة من DeepAI");
+  }
+}
   }
 
   // 🃏 [البطاقة الثانية]: الدردشة الذكية اللانهائية (OpenRouter)
@@ -276,7 +311,7 @@ return message.reply(finalImgUrl);
     try {
 
       const response = await axios.post(
-     'https://api.cobalt.tools/api/json',
+     'https://api.cobalt.tools/',
 
         {
           url: matchedUrls[0],
