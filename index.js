@@ -1,9 +1,3 @@
-// ============================================================
-//  🤖 NexusAI Bot — PRO VISION & CHAT EDITION
-//  Main: Llama 3.3 70B (Ultra Smart) | Vision: Llama 3.2
-//  Dashboard | Memory | Multi-Language | 100% Free
-// ============================================================
-
 const { Client, GatewayIntentBits, Partials, ActivityType } = require("discord.js");
 const express = require("express");
 const session = require("express-session");
@@ -17,7 +11,7 @@ const CONFIG = {
   GROQ_API_KEY: process.env.GROQ_API_KEY,
   DASHBOARD_PORT: process.env.PORT || 3000,
   DASHBOARD_URL: process.env.DASHBOARD_URL,
-  SESSION_SECRET: process.env.SESSION_SECRET || "nexus-pro-secret",
+  SESSION_SECRET: process.env.SESSION_SECRET || "nexus-final-secret",
   MAX_MEMORY: 15,
 };
 
@@ -30,64 +24,56 @@ const userMemory = new Map();
 const aiChannels = new Map();
 const botStats = { messagesHandled: 0, errors: 0 };
 
-// ─── AI MODELS ───────────────────────────────────────────────
-const POWERFUL_CHAT_MODEL = "llama-3.3-70b-versatile"; // The Smartest
-const VISION_MODEL = "llama-3.2-11b-vision-preview";   // The Eyes
-const FALLBACK_MODEL = "llama-3.1-70b-versatile";
+// ─── AI MODELS (Ranked by Power & Reliability) ────────────────
+const MODELS = [
+  "llama-3.3-70b-versatile",
+  "llama-3.1-70b-versatile",
+  "mixtral-8x7b-32768",
+  "llama-3.1-8b-instant" // The "Never Fails" model
+];
+const VISION_MODEL = "llama-3.2-11b-vision-preview";
 
-async function getAIResponse(messages, imageUrl = null) {
-  // Use Vision model if there's an image, otherwise use the Powerful Chat model
-  const model = imageUrl ? VISION_MODEL : POWERFUL_CHAT_MODEL;
+async function getAIResponse(messages, imageUrl = null, attempt = 0) {
+  if (attempt >= MODELS.length) throw new Error("All models are currently overloaded.");
+  
+  const model = imageUrl ? VISION_MODEL : MODELS[attempt];
   
   try {
     const payload = {
       model: model,
-      messages: [
-        { role: "system", content: "أنت مساعد ذكي جداً اسمك NexusAI. تستخدم أقوى الموديلات للرد. تحدث بلغة المستخدم دائماً." },
-        ...messages
-      ]
+      messages: [{ role: "system", content: "أنت مساعد ذكي اسمك NexusAI. تحدث بلغة المستخدم دائماً." }, ...messages]
     };
-
     if (imageUrl) {
       const lastMsg = payload.messages[payload.messages.length - 1];
-      lastMsg.content = [
-        { type: "text", text: lastMsg.content },
-        { type: "image_url", image_url: { url: imageUrl } }
-      ];
+      lastMsg.content = [{ type: "text", text: lastMsg.content }, { type: "image_url", image_url: { url: imageUrl } }];
     }
-
+    
     const res = await axios.post("https://api.groq.com/openai/v1/chat/completions", payload, {
       headers: { "Authorization": `Bearer ${CONFIG.GROQ_API_KEY}`, "Content-Type": "application/json" },
-      timeout: 30000
+      timeout: 25000
     });
     return res.data.choices[0].message.content;
   } catch (err) {
-    // If the powerful model is busy, try the fallback
-    if (!imageUrl && err.response?.status === 503) {
-       console.log("⚠️ Main model busy, trying fallback...");
-       const fallbackPayload = { model: FALLBACK_MODEL, messages: [{role:"system", content:"smart assistant"}, ...messages] };
-       const res = await axios.post("https://api.groq.com/openai/v1/chat/completions", fallbackPayload, {
-         headers: { "Authorization": `Bearer ${CONFIG.GROQ_API_KEY}`, "Content-Type": "application/json" }
-       });
-       return res.data.choices[0].message.content;
+    const isOverloaded = err.response?.status === 503 || err.response?.status === 429 || err.response?.status === 500;
+    if (isOverloaded && !imageUrl) {
+      console.log(`⚠️ Model ${model} busy, trying fallback #${attempt + 1}...`);
+      return getAIResponse(messages, null, attempt + 1);
     }
     throw err;
   }
 }
 
-// ─── DISCORD ─────────────────────────────────────────────────
 client.once("ready", () => {
-  console.log(`✅ Pro AI Bot Online: ${client.user.tag}`);
-  client.user.setActivity("🧠 Llama 3.3 70B | 👁️ Vision", { type: ActivityType.Watching });
+  console.log(`✅ Unstoppable AI Bot Online: ${client.user.tag}`);
+  client.user.setActivity("🧠 Pro AI | 👁️ Vision", { type: ActivityType.Watching });
 });
 
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   const isAI = !message.guild || (aiChannels.get(message.guild.id)?.has(message.channel.id));
   if (!isAI) return;
-
   if (message.content === "!clear") { userMemory.delete(message.author.id); return message.reply("🧹 تم مسح الذاكرة!"); }
-
+  
   const image = message.attachments.find(a => a.contentType?.startsWith("image/"));
   const userText = message.content || (image ? "ماذا ترى في هذه الصورة؟" : "");
   if (!userText && !image) return;
@@ -104,15 +90,18 @@ client.on("messageCreate", async (message) => {
     userMemory.set(message.author.id, mem);
     
     botStats.messagesHandled++;
-    message.reply(reply.length > 2000 ? reply.substring(0, 1990) + "..." : reply);
+    if (reply.length > 2000) {
+      const chunks = reply.match(/.{1,1900}/gs) || [];
+      for (const chunk of chunks) await message.reply(chunk);
+    } else {
+      await message.reply(reply);
+    }
   } catch (err) {
     botStats.errors++;
-    console.error("AI Error:", err.response?.data || err.message);
-    message.reply("⚠️ السيرفر مضغوط حالياً، جرب كمان شوي!");
+    message.reply("⚠️ كل السيرفرات مضغوطة حالياً، حاول مرة ثانية بعد ثواني!");
   }
 });
 
-// ─── DASHBOARD (Simplified & Fast) ───────────────────────────
 const app = express();
 app.use(express.json());
 app.use(session({ secret: CONFIG.SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: true } }));
@@ -146,7 +135,7 @@ app.post("/api/guild/:id/channel/toggle", (req, res) => {
   res.json({ active: a });
 });
 
-app.get("/", (req, res) => req.session.user ? res.redirect("/dashboard") : res.send('<body style="background:#0a0a0f;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif"><div style="text-align:center"><h1>🧠 NexusAI Pro</h1><p>Llama 3.3 70B + Vision</p><br><a href="/login" style="background:#5865f2;color:#fff;padding:15px 30px;border-radius:10px;text-decoration:none;font-weight:bold">Login with Discord</a></div></body>'));
+app.get("/", (req, res) => req.session.user ? res.redirect("/dashboard") : res.send('<body style="background:#0a0a0f;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif"><div style="text-align:center"><h1>🧠 NexusAI Unstoppable</h1><a href="/login" style="background:#5865f2;color:#fff;padding:15px 30px;border-radius:10px;text-decoration:none;font-weight:bold">Login with Discord</a></div></body>'));
 app.get("/dashboard", (req, res) => res.send(`<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head><meta charset="UTF-8"><title>NexusAI Pro Dashboard</title>
@@ -168,5 +157,5 @@ load();
 </script>
 </body></html>`));
 
-http.createServer(app).listen(CONFIG.DASHBOARD_PORT, () => console.log("🔥 Pro Dashboard Ready"));
+http.createServer(app).listen(CONFIG.DASHBOARD_PORT, () => console.log("🔥 Unstoppable Dashboard Ready"));
 client.login(CONFIG.DISCORD_TOKEN);
