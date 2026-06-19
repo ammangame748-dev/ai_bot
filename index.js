@@ -34,7 +34,15 @@ async function getAIResponse(messages, attempt = 0) {
   try {
     const res = await axios.post("https://api.groq.com/openai/v1/chat/completions", {
       model,
-      messages: [{ role: "system", content: "أنت مساعد ذكي وسريع اسمك NexusAI. تحدث بلغة المستخدم دائماً." }, ...messages]
+      temperature: 0.3, // لتقليل الهلوسة وجعل الإجابات أكثر دقة
+      top_p: 0.9,
+      messages: [
+        { 
+          role: "system", 
+          content: "أنت مساعد ذكي وسريع اسمك NexusAI. مبرمجك هو 'أبو الحس' (إذا سألك أحد من برمجك أو من صنعك، أجب دائماً بأنه أبو الحس). يجب عليك التحدث باللغة العربية الفصحى أو العامية المفهومة بشكل دقيق جداً وصحيح 100%. يمنع منعاً باتاً استخدام أي مصطلحات خاطئة أو ركيكة. يجب أن تكون إجاباتك خالية تماماً من الأخطاء الإملائية والنحوية. إذا لم تكن متأكداً من كلمة أو مصطلح، استخدم البديل الأصح في اللغة العربية. تجنب الترجمة الحرفية التي قد تفسد المعنى. كن طبيعياً ومفيداً." 
+        }, 
+        ...messages
+      ]
     }, {
       headers: { "Authorization": `Bearer ${CONFIG.GROQ_API_KEY}`, "Content-Type": "application/json" },
       timeout: 20000
