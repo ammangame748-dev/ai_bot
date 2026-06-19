@@ -1,123 +1,202 @@
-const { Client, GatewayIntentBits, AttachmentBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, ChannelType, AttachmentBuilder } = require('discord.js');
 const express = require('express');
+const session = require('express-session');
+const passport = require('passport');
+const DiscordStrategy = require('passport-discord').Strategy;
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
-const { exec } = require('child_process');
-require('dotenv').config();
+const { removeBackground } = require('@imgly/background-removal-node');
 
-const app = express();
-const port = process.env.PORT || 3000;
-app.use(express.urlencoded({ extended: true }));
-
-let config = {
-    chat_channel: '',
-    image_gen_channel: '',
-    bg_remove_channel: '',
-    video_dl_channel: ''
+// ==========================================
+// ⚙️ الإعدادات - عبي بياناتك هون يا وحش
+// ==========================================
+const CONFIG = {
+    TOKEN: 'YOUR_BOT_TOKEN',
+    CLIENT_ID: 'YOUR_CLIENT_ID',
+    CLIENT_SECRET: 'YOUR_CLIENT_SECRET',
+    CALLBACK_URL: 'http://localhost:3000/auth/discord/callback',
+    PORT: 3000,
+    OLLAMA_URL: 'http://127.0.0.1:11434/api/generate',
+    OLLAMA_MODEL: 'llama3',
+    STABLE_DIFFUSION_URL: 'http://127.0.0.1:7860/sdapi/v1/txt2img' // إذا بدك تولد صور محلياً
 };
+
+// مخزن البيانات البسيط (في الذاكرة)
+let db = { guilds: {} };
+
+// ==========================================
+// 🤖 إعداد البوت (Discord Bot)
+// ==========================================
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers
+    ],
+    partials: [Partials.Channel]
+});
+
+client.on('messageCreate', async (message) => {
+    if (message.author.bot || !message.guild) return;
+
+    const settings = db.guilds[message.guildId] || { aiRooms: [], imgRooms: [], bgRooms: [] };
+
+    // 1. نظام الشات الذكي (Ollama)
+    if (settings.aiRooms.includes(message.channelId)) {
+        message.channel.sendTyping();
+        try {
+            const res = await axios.post(CONFIG.OLLAMA_URL, {
+                model: CONFIG.OLLAMA_MODEL,
+                prompt: message.content,
+                stream: false
+            });
+            message.reply(res.data.response);
+        } catch (e) {
+            message.reply("❌ تأكد إن Ollama شغال عندك بالخلفية.");
+        }
+    }
+
+    // 2. نظام توليد الصور (Stable Diffusion المحلي)
+    if (settings.imgRooms.includes(message.channelId)) {
+        const wait = await message.reply("🎨 جاري رسم لوحتك... انتظر قليلاً.");
+        try {
+            const res = await axios.post(CONFIG.STABLE_DIFFUSION_URL, {
+                prompt: message.content,
+                steps: 20
+            });
+            const buffer = Buffer.from(res.data.images[0], 'base64');
+            const attachment = new AttachmentBuilder(buffer, { name: 'generated.png' });
+            await message.reply({ files: [attachment] });
+            wait.delete();
+        } catch (e) {
+            wait.edit("❌ فشل الاتصال بـ Stable Diffusion. تأكد إنه شغال.");
+        }
+    }
+
+    // 3. إزالة الخلفية (تلقائي عند رفع صورة)
+    if (settings.bgRooms.includes(message.channelId) && message.attachments.size > 0) {
+        const file = message.attachments.first();
+        if (file.contentType.startsWith('image/')) {
+            const wait = await message.reply("✨ جاري مسح الخلفية...");
+            try {
+                const blob = await removeBackground(file.url);
+                const buffer = Buffer.from(await blob.arrayBuffer());
+                const attachment = new AttachmentBuilder(buffer, { name: 'no-bg.png' });
+                await message.reply({ files: [attachment] });
+                wait.delete();
+            } catch (e) {
+                wait.edit("❌ حدث خطأ أثناء معالجة الصورة.");
+            }
+        }
+    }
+});
+
+// ==========================================
+// 🌐 الداشبورد (Dashboard)
+// ==========================================
+const app = express();
+app.set('view engine', 'ejs');
+app.use(express.urlencoded({ extended: true }));
+app.use(session({ secret: 'secret-key', resave: false, saveUninitialized: false }));
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.serializeUser((u, d) => d(null, u));
+passport.deserializeUser((o, d) => d(null, o));
+
+passport.use(new DiscordStrategy({
+    clientID: CONFIG.CLIENT_ID,
+    clientSecret: CONFIG.CLIENT_SECRET,
+    callbackURL: CONFIG.CALLBACK_URL,
+    scope: ['identify', 'guilds']
+}, (a, r, p, d) => d(null, p)));
+
+// قوالب الـ HTML (بملف واحد)
+const CSS = `
+    body { background: #0f0c29; background: linear-gradient(to right, #24243e, #302b63, #0f0c29); color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; }
+    .container { max-width: 900px; margin: 50px auto; padding: 20px; background: rgba(0,0,0,0.5); border-radius: 20px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+    .card { background: #1a1a2e; border: 1px solid #16213e; border-radius: 15px; padding: 20px; margin: 15px; display: inline-block; width: 250px; transition: 0.3s; }
+    .card:hover { transform: translateY(-10px); box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
+    .btn { background: #e94560; color: white; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: bold; border: none; cursor: pointer; }
+    select { width: 100%; padding: 10px; border-radius: 5px; background: #16213e; color: white; border: 1px solid #e94560; margin-bottom: 15px; }
+`;
 
 app.get('/', (req, res) => {
     res.send(`
-        <html dir="rtl">
-        <body style="background: #2c2f33; color: white; font-family: sans-serif; padding: 50px;">
-            <div style="max-width: 500px; margin: auto; background: #23272a; padding: 20px; border-radius: 10px;">
-                <h1 style="text-align: center;">لوحة تحكم بوت AI (Replicate)</h1>
-                <form action="/save" method="POST">
-                    <label>ID قناة الدردشة (Llama 3):</label><br>
-                    <input type="text" name="chat_channel" value="${config.chat_channel}" style="width:100%; padding: 8px; margin: 10px 0;"><br>
-                    <label>ID قناة الصور (SDXL):</label><br>
-                    <input type="text" name="image_gen_channel" value="${config.image_gen_channel}" style="width:100%; padding: 8px; margin: 10px 0;"><br>
-                    <label>ID قناة إزالة الخلفية:</label><br>
-                    <input type="text" name="bg_remove_channel" value="${config.bg_remove_channel}" style="width:100%; padding: 8px; margin: 10px 0;"><br>
-                    <label>ID قناة الفيديوهات:</label><br>
-                    <input type="text" name="video_dl_channel" value="${config.video_dl_channel}" style="width:100%; padding: 8px; margin: 10px 0;"><br>
-                    <button type="submit" style="width: 100%; background: #7289da; color: white; border: none; padding: 10px; cursor: pointer; border-radius: 5px;">حفظ</button>
-                </form>
-            </div>
-        </body>
-        </html>
+        <style>${CSS}</style>
+        <div class="container" dir="rtl">
+            <h1>🚀 داشبورد البوت الخارق</h1>
+            <p>تحكم في سيرفرك بذكاء اصطناعي محلي كامل</p>
+            ${req.user ? `<p>أهلاً بك، ${req.user.username}</p><a href="/dashboard" class="btn">دخول اللوحة</a>` : `<a href="/auth/discord" class="btn">تسجيل دخول ديسكورد</a>`}
+        </div>
     `);
 });
 
-app.post('/save', (req, res) => {
-    config = { ...config, ...req.body };
-    console.log("Config Updated:", config);
-    res.redirect('/');
+app.get('/auth/discord', passport.authenticate('discord'));
+app.get('/auth/discord/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/dashboard'));
+
+app.get('/dashboard', (req, res) => {
+    if (!req.user) return res.redirect('/');
+    const guilds = req.user.guilds.filter(g => (g.permissions & 0x8) === 0x8);
+    res.send(`
+        <style>${CSS}</style>
+        <div class="container" dir="rtl">
+            <h2>اختر سيرفر للإدارة</h2>
+            ${guilds.map(g => `
+                <div class="card">
+                    <h3>${g.name}</h3>
+                    <a href="/manage/${g.id}" class="btn">إعداد الرومات</a>
+                </div>
+            `).join('')}
+        </div>
+    `);
 });
 
-app.listen(port, () => console.log(`Dashboard active on port ${port}`));
+app.get('/manage/:id', (req, res) => {
+    if (!req.user) return res.redirect('/');
+    const guild = client.guilds.cache.get(req.params.id);
+    if (!guild) return res.send("البوت مش موجود بالسيرفر!");
+    
+    const channels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText);
+    const s = db.guilds[req.params.id] || { aiRooms: [], imgRooms: [], bgRooms: [] };
 
-const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+    res.send(`
+        <style>${CSS}</style>
+        <div class="container" dir="rtl">
+            <h2>إدارة سيرفر: ${guild.name}</h2>
+            <form action="/save/${req.params.id}" method="POST">
+                <div style="text-align: right; padding: 20px;">
+                    <label>🤖 رومات الشات الذكي (Ollama):</label>
+                    <select name="aiRooms" multiple>
+                        ${channels.map(c => `<option value="${c.id}" ${s.aiRooms.includes(c.id) ? 'selected' : ''}>#${c.name}</option>`).join('')}
+                    </select>
+
+                    <label>🎨 رومات توليد الصور (Stable Diffusion):</label>
+                    <select name="imgRooms" multiple>
+                        ${channels.map(c => `<option value="${c.id}" ${s.imgRooms.includes(c.id) ? 'selected' : ''}>#${c.name}</option>`).join('')}
+                    </select>
+
+                    <label>✨ رومات إزالة الخلفية:</label>
+                    <select name="bgRooms" multiple>
+                        ${channels.map(c => `<option value="${c.id}" ${s.bgRooms.includes(c.id) ? 'selected' : ''}>#${c.name}</option>`).join('')}
+                    </select>
+                </div>
+                <button type="submit" class="btn">حفظ الإعدادات ✅</button>
+            </form>
+        </div>
+    `);
 });
 
-const REPLICATE_TOKEN = process.env.REPLICATE_API_TOKEN;
-
-async function callReplicate(version, input) {
-    try {
-        const response = await axios.post('https://api.replicate.com/v1/predictions', 
-            { version, input },
-            { headers: { 'Authorization': `Token ${REPLICATE_TOKEN}`, 'Content-Type': 'application/json' } }
-        );
-        
-        let prediction = response.data;
-        while (prediction.status !== 'succeeded' && prediction.status !== 'failed') {
-            await new Promise(r => setTimeout(r, 2000));
-            const check = await axios.get(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
-                headers: { 'Authorization': `Token ${REPLICATE_TOKEN}` }
-            });
-            prediction = check.data;
-        }
-        
-        if (prediction.status === 'failed') throw new Error(prediction.error);
-        return prediction.output;
-    } catch (error) {
-        console.error("Replicate Error:", error.message);
-        throw error;
-    }
-}
-
-client.on('ready', () => console.log(`Bot Ready: ${client.user.tag}`));
-
-client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
-    const channelId = message.channel.id;
-
-    try {
-        if (channelId === config.chat_channel) {
-            await message.channel.sendTyping();
-            const output = await callReplicate("7119221d9b1a4369408092283e18f2f458e046a624f2165e3863d043f656221c", { prompt: message.content });
-            await message.reply(Array.isArray(output) ? output.join("") : output);
-        }
-        else if (channelId === config.image_gen_channel) {
-            await message.channel.sendTyping();
-            const output = await callReplicate("7762fd0e230408d3c7903e98199d75bee3f7930563d3264025bcb1a7353e8a73", { prompt: message.content });
-            await message.reply(Array.isArray(output) ? output[0] : output);
-        }
-        else if (channelId === config.bg_remove_channel) {
-            if (message.attachments.size > 0) {
-                await message.channel.sendTyping();
-                const output = await callReplicate("95fcc2a26d773517c1d770393985ae067a65239e48719875a6c118b9b392261d", { image: message.attachments.first().url });
-                await message.reply(output);
-            }
-        }
-        else if (channelId === config.video_dl_channel) {
-            if (message.content.includes('http')) {
-                await message.channel.sendTyping();
-                const filePath = path.join(__dirname, `vid_${Date.now()}.mp4`);
-                exec(`yt-dlp -o "${filePath}" "${message.content}"`, async (err) => {
-                    if (err) return message.reply("فشل التنزيل.");
-                    if (fs.existsSync(filePath)) {
-                        await message.reply({ files: [new AttachmentBuilder(filePath)] });
-                        fs.unlinkSync(filePath);
-                    }
-                });
-            }
-        }
-    } catch (e) {
-        message.reply(`حدث خطأ: ${e.message}`);
-    }
+app.post('/save/:id', (req, res) => {
+    const format = (v) => Array.isArray(v) ? v : (v ? [v] : []);
+    db.guilds[req.params.id] = {
+        aiRooms: format(req.body.aiRooms),
+        imgRooms: format(req.body.imgRooms),
+        bgRooms: format(req.body.bgRooms)
+    };
+    res.redirect('/dashboard');
 });
 
-client.login(process.env.DISCORD_TOKEN);
+// تشغيل الكل
+app.listen(CONFIG.PORT, () => console.log(`🌐 Dashboard: http://localhost:${CONFIG.PORT}`));
+client.login(CONFIG.TOKEN).catch(() => console.log("❌ التوكن غلط يا وحش!"));
