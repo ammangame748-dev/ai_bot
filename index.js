@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, EmbedBuilder, ChannelType, AttachmentBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, ChannelType, AttachmentBuilder } = require('discord.js');
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
@@ -7,17 +7,17 @@ const axios = require('axios');
 const { removeBackground } = require('@imgly/background-removal-node');
 
 // ==========================================
-// ⚙️ الإعدادات - عبي بياناتك هون يا وحش
+// ⚙️ الإعدادات - بيسحبها من Render Environment Variables
 // ==========================================
 const CONFIG = {
-    TOKEN: 'YOUR_BOT_TOKEN',
-    CLIENT_ID: 'YOUR_CLIENT_ID',
-    CLIENT_SECRET: 'YOUR_CLIENT_SECRET',
-    CALLBACK_URL: 'http://localhost:3000/auth/discord/callback',
-    PORT: 3000,
-    OLLAMA_URL: 'http://127.0.0.1:11434/api/generate',
-    OLLAMA_MODEL: 'llama3',
-    STABLE_DIFFUSION_URL: 'http://127.0.0.1:7860/sdapi/v1/txt2img' // إذا بدك تولد صور محلياً
+    TOKEN: process.env.DISCORD_TOKEN,
+    CLIENT_ID: process.env.CLIENT_ID,
+    CLIENT_SECRET: process.env.CLIENT_SECRET,
+    CALLBACK_URL: process.env.CALLBACK_URL || 'http://localhost:3000/auth/discord/callback',
+    PORT: process.env.PORT || 3000,
+    OLLAMA_URL: process.env.OLLAMA_URL || 'http://127.0.0.1:11434/api/generate',
+    OLLAMA_MODEL: process.env.OLLAMA_MODEL || 'llama3',
+    STABLE_DIFFUSION_URL: process.env.STABLE_DIFFUSION_URL || 'http://127.0.0.1:7860/sdapi/v1/txt2img'
 };
 
 // مخزن البيانات البسيط (في الذاكرة)
@@ -36,6 +36,10 @@ const client = new Client({
     partials: [Partials.Channel]
 });
 
+client.on('ready', () => {
+    console.log(`✅ البوت شغال باسم: ${client.user.tag}`);
+});
+
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
@@ -52,7 +56,7 @@ client.on('messageCreate', async (message) => {
             });
             message.reply(res.data.response);
         } catch (e) {
-            message.reply("❌ تأكد إن Ollama شغال عندك بالخلفية.");
+            console.error("Ollama Error:", e.message);
         }
     }
 
@@ -69,7 +73,7 @@ client.on('messageCreate', async (message) => {
             await message.reply({ files: [attachment] });
             wait.delete();
         } catch (e) {
-            wait.edit("❌ فشل الاتصال بـ Stable Diffusion. تأكد إنه شغال.");
+            wait.edit("❌ فشل الاتصال بـ Stable Diffusion.");
         }
     }
 
@@ -104,14 +108,15 @@ app.use(passport.session());
 passport.serializeUser((u, d) => d(null, u));
 passport.deserializeUser((o, d) => d(null, o));
 
-passport.use(new DiscordStrategy({
-    clientID: CONFIG.CLIENT_ID,
-    clientSecret: CONFIG.CLIENT_SECRET,
-    callbackURL: CONFIG.CALLBACK_URL,
-    scope: ['identify', 'guilds']
-}, (a, r, p, d) => d(null, p)));
+if (CONFIG.CLIENT_ID && CONFIG.CLIENT_SECRET) {
+    passport.use(new DiscordStrategy({
+        clientID: CONFIG.CLIENT_ID,
+        clientSecret: CONFIG.CLIENT_SECRET,
+        callbackURL: CONFIG.CALLBACK_URL,
+        scope: ['identify', 'guilds']
+    }, (a, r, p, d) => d(null, p)));
+}
 
-// قوالب الـ HTML (بملف واحد)
 const CSS = `
     body { background: #0f0c29; background: linear-gradient(to right, #24243e, #302b63, #0f0c29); color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; }
     .container { max-width: 900px; margin: 50px auto; padding: 20px; background: rgba(0,0,0,0.5); border-radius: 20px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
@@ -198,5 +203,10 @@ app.post('/save/:id', (req, res) => {
 });
 
 // تشغيل الكل
-app.listen(CONFIG.PORT, () => console.log(`🌐 Dashboard: http://localhost:${CONFIG.PORT}`));
-client.login(CONFIG.TOKEN).catch(() => console.log("❌ التوكن غلط يا وحش!"));
+app.listen(CONFIG.PORT, () => console.log(`🌐 Dashboard active on port ${CONFIG.PORT}`));
+
+if (CONFIG.TOKEN) {
+    client.login(CONFIG.TOKEN).catch(e => console.log("❌ Error logging in:", e.message));
+} else {
+    console.log("⚠️ No DISCORD_TOKEN provided. Bot is not running.");
+}
