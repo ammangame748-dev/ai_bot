@@ -53,6 +53,8 @@ client.on('messageCreate', async (message) => {
                 model: CONFIG.OLLAMA_MODEL,
                 prompt: message.content,
                 stream: false
+            }, {
+                headers: { 'ngrok-skip-browser-warning': 'true' }
             });
             message.reply(res.data.response);
         } catch (e) {
@@ -67,6 +69,8 @@ client.on('messageCreate', async (message) => {
             const res = await axios.post(CONFIG.STABLE_DIFFUSION_URL, {
                 prompt: message.content,
                 steps: 20
+            }, {
+                headers: { 'ngrok-skip-browser-warning': 'true' }
             });
             const buffer = Buffer.from(res.data.images[0], 'base64');
             const attachment = new AttachmentBuilder(buffer, { name: 'generated.png' });
