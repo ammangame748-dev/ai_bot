@@ -1,7 +1,7 @@
 {
-  "name": "discord-ai-bot-all-in-one",
+  "name": "nexusai-discord-bot",
   "version": "1.0.0",
-  "description": "Discord Bot with Dashboard and Local AI (Ollama)",
+  "description": "🤖 NexusAI — Discord AI Bot with Fire Dashboard",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -10,12 +10,10 @@
     "discord.js": "^14.15.3",
     "express": "^4.19.2",
     "express-session": "^1.18.0",
-    "passport": "^0.7.0",
-    "passport-discord": "^0.1.4",
-    "axios": "^1.7.2",
-    "dotenv": "^16.4.5",
-    "ejs": "^3.1.10",
-    "@imgly/background-removal-node": "^1.4.5",
-    "canvas": "^2.11.2"
+    "openai": "^4.52.7",
+    "axios": "^1.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
