@@ -1,9 +1,3 @@
-/ ============================================================
-//  🤖 NexusAI Bot — PRO VISION & CHAT EDITION
-//  Main: Llama 3.3 70B (Ultra Smart) | Vision: Llama 3.2
-//  Dashboard | Memory | Multi-Language | 100% Free
-// ============================================================
-
 const { Client, GatewayIntentBits, Partials, ActivityType } = require("discord.js");
 const express = require("express");
 const session = require("express-session");
@@ -30,43 +24,29 @@ const userMemory = new Map();
 const aiChannels = new Map();
 const botStats = { messagesHandled: 0, errors: 0 };
 
-// ─── AI MODELS ───────────────────────────────────────────────
-const POWERFUL_CHAT_MODEL = "llama-3.3-70b-versatile"; // The Smartest
-const VISION_MODEL = "llama-3.2-11b-vision-preview";   // The Eyes
+const POWERFUL_CHAT_MODEL = "llama-3.3-70b-versatile";
+const VISION_MODEL = "llama-3.2-11b-vision-preview";
 const FALLBACK_MODEL = "llama-3.1-70b-versatile";
 
 async function getAIResponse(messages, imageUrl = null) {
-  // Use Vision model if there's an image, otherwise use the Powerful Chat model
   const model = imageUrl ? VISION_MODEL : POWERFUL_CHAT_MODEL;
-  
   try {
     const payload = {
       model: model,
-      messages: [
-        { role: "system", content: "أنت مساعد ذكي جداً اسمك NexusAI. تستخدم أقوى الموديلات للرد. تحدث بلغة المستخدم دائماً." },
-        ...messages
-      ]
+      messages: [{ role: "system", content: "أنت مساعد ذكي جداً اسمك NexusAI. تستخدم أقوى الموديلات للرد. تحدث بلغة المستخدم دائماً." }, ...messages]
     };
-
     if (imageUrl) {
       const lastMsg = payload.messages[payload.messages.length - 1];
-      lastMsg.content = [
-        { type: "text", text: lastMsg.content },
-        { type: "image_url", image_url: { url: imageUrl } }
-      ];
+      lastMsg.content = [{ type: "text", text: lastMsg.content }, { type: "image_url", image_url: { url: imageUrl } }];
     }
-
     const res = await axios.post("https://api.groq.com/openai/v1/chat/completions", payload, {
       headers: { "Authorization": `Bearer ${CONFIG.GROQ_API_KEY}`, "Content-Type": "application/json" },
       timeout: 30000
     });
     return res.data.choices[0].message.content;
   } catch (err) {
-    // If the powerful model is busy, try the fallback
     if (!imageUrl && err.response?.status === 503) {
-       console.log("⚠️ Main model busy, trying fallback...");
-       const fallbackPayload = { model: FALLBACK_MODEL, messages: [{role:"system", content:"smart assistant"}, ...messages] };
-       const res = await axios.post("https://api.groq.com/openai/v1/chat/completions", fallbackPayload, {
+       const res = await axios.post("https://api.groq.com/openai/v1/chat/completions", { model: FALLBACK_MODEL, messages: [{role:"system", content:"smart assistant"}, ...messages] }, {
          headers: { "Authorization": `Bearer ${CONFIG.GROQ_API_KEY}`, "Content-Type": "application/json" }
        });
        return res.data.choices[0].message.content;
@@ -75,7 +55,6 @@ async function getAIResponse(messages, imageUrl = null) {
   }
 }
 
-// ─── DISCORD ─────────────────────────────────────────────────
 client.once("ready", () => {
   console.log(`✅ Pro AI Bot Online: ${client.user.tag}`);
   client.user.setActivity("🧠 Llama 3.3 70B | 👁️ Vision", { type: ActivityType.Watching });
@@ -85,34 +64,26 @@ client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   const isAI = !message.guild || (aiChannels.get(message.guild.id)?.has(message.channel.id));
   if (!isAI) return;
-
-  if (message.content === "!clear") { userMemory.delete(message.author.id); return message.reply("🧹 تم مسح الذاكرة!"); }
-
+  if (message.content === "!clear") { userMemory.delete(message.author.id); return message.reply("🧹 تم!"); }
   const image = message.attachments.find(a => a.contentType?.startsWith("image/"));
   const userText = message.content || (image ? "ماذا ترى في هذه الصورة؟" : "");
   if (!userText && !image) return;
-
   await message.channel.sendTyping();
   try {
     const mem = userMemory.get(message.author.id) || [];
     mem.push({ role: "user", content: userText });
-    
     const reply = await getAIResponse(mem, image?.url);
-    
     mem.push({ role: "assistant", content: reply });
     if (mem.length > CONFIG.MAX_MEMORY * 2) mem.splice(0, 2);
     userMemory.set(message.author.id, mem);
-    
     botStats.messagesHandled++;
     message.reply(reply.length > 2000 ? reply.substring(0, 1990) + "..." : reply);
   } catch (err) {
     botStats.errors++;
-    console.error("AI Error:", err.response?.data || err.message);
     message.reply("⚠️ السيرفر مضغوط حالياً، جرب كمان شوي!");
   }
 });
 
-// ─── DASHBOARD (Simplified & Fast) ───────────────────────────
 const app = express();
 app.use(express.json());
 app.use(session({ secret: CONFIG.SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: true } }));
