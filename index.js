@@ -1,9 +1,15 @@
+// ============================================================
+//  🤖 NexusAI Bot — STABLE FREE EDITION (Groq + Axios)
+//  Dashboard | Memory | Multi-Language | 100% Free
+// ============================================================
+
 const { Client, GatewayIntentBits, Partials, ActivityType } = require("discord.js");
 const express = require("express");
 const session = require("express-session");
 const axios = require("axios");
 const http = require("http");
 
+// ─── CONFIG ──────────────────────────────────────────────────
 const CONFIG = {
   DISCORD_TOKEN: process.env.DISCORD_TOKEN,
   DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
@@ -11,85 +17,85 @@ const CONFIG = {
   GROQ_API_KEY: process.env.GROQ_API_KEY,
   DASHBOARD_PORT: process.env.PORT || 3000,
   DASHBOARD_URL: process.env.DASHBOARD_URL,
-  SESSION_SECRET: process.env.SESSION_SECRET || "nexus-final-secret",
+  SESSION_SECRET: process.env.SESSION_SECRET || "nexus-stable-secret",
   MAX_MEMORY: 15,
 };
 
+// ─── DISCORD CLIENT ──────────────────────────────────────────
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+  ],
   partials: [Partials.Channel, Partials.Message],
 });
 
 const userMemory = new Map();
 const aiChannels = new Map();
-const botStats = { messagesHandled: 0, errors: 0 };
+const botStats = { messagesHandled: 0, startTime: Date.now(), errors: 0 };
 
-// ─── AI MODELS (Ranked by Power & Reliability) ────────────────
-const MODELS = [
-  "llama-3.3-70b-versatile",
-  "llama-3.1-70b-versatile",
-  "mixtral-8x7b-32768",
-  "llama-3.1-8b-instant" // The "Never Fails" model
-];
-const VISION_MODEL = "llama-3.2-11b-vision-preview";
-
-async function getAIResponse(messages, imageUrl = null, attempt = 0) {
-  if (attempt >= MODELS.length) throw new Error("All models are currently overloaded.");
-  
-  const model = imageUrl ? VISION_MODEL : MODELS[attempt];
-  
-  try {
-    const payload = {
-      model: model,
-      messages: [{ role: "system", content: "أنت مساعد ذكي اسمك NexusAI. تحدث بلغة المستخدم دائماً." }, ...messages]
-    };
-    if (imageUrl) {
-      const lastMsg = payload.messages[payload.messages.length - 1];
-      lastMsg.content = [{ type: "text", text: lastMsg.content }, { type: "image_url", image_url: { url: imageUrl } }];
-    }
-    
-    const res = await axios.post("https://api.groq.com/openai/v1/chat/completions", payload, {
-      headers: { "Authorization": `Bearer ${CONFIG.GROQ_API_KEY}`, "Content-Type": "application/json" },
-      timeout: 25000
-    });
-    return res.data.choices[0].message.content;
-  } catch (err) {
-    const isOverloaded = err.response?.status === 503 || err.response?.status === 429 || err.response?.status === 500;
-    if (isOverloaded && !imageUrl) {
-      console.log(`⚠️ Model ${model} busy, trying fallback #${attempt + 1}...`);
-      return getAIResponse(messages, null, attempt + 1);
-    }
-    throw err;
-  }
+// ─── HELPERS ─────────────────────────────────────────────────
+function getMemory(userId) {
+  if (!userMemory.has(userId)) userMemory.set(userId, []);
+  return userMemory.get(userId);
 }
 
+function addToMemory(userId, role, content) {
+  const mem = getMemory(userId);
+  mem.push({ role, content });
+  if (mem.length > CONFIG.MAX_MEMORY * 2) mem.splice(0, 2);
+}
+
+// ─── DISCORD HANDLERS ────────────────────────────────────────
 client.once("ready", () => {
-  console.log(`✅ Unstoppable AI Bot Online: ${client.user.tag}`);
-  client.user.setActivity("🧠 Pro AI | 👁️ Vision", { type: ActivityType.Watching });
+  console.log(`✅ Stable Free AI Bot Online: ${client.user.tag}`);
+  client.user.setActivity("🤖 Free AI Chat", { type: ActivityType.Watching });
 });
 
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
-  const isAI = !message.guild || (aiChannels.get(message.guild.id)?.has(message.channel.id));
-  if (!isAI) return;
-  if (message.content === "!clear") { userMemory.delete(message.author.id); return message.reply("🧹 تم مسح الذاكرة!"); }
-  
-  const image = message.attachments.find(a => a.contentType?.startsWith("image/"));
-  const userText = message.content || (image ? "ماذا ترى في هذه الصورة؟" : "");
-  if (!userText && !image) return;
+  const guildId = message.guild?.id;
+  const channelId = message.channel.id;
+  const userId = message.author.id;
+
+  const isAIChannel = !guildId || (aiChannels.has(guildId) && aiChannels.get(guildId).has(channelId));
+  if (!isAIChannel) return;
+
+  if (message.content.startsWith("!clear")) {
+    userMemory.delete(userId);
+    return message.reply("🧹 تم مسح الذاكرة!");
+  }
 
   await message.channel.sendTyping();
+
   try {
-    const mem = userMemory.get(message.author.id) || [];
-    mem.push({ role: "user", content: userText });
+    addToMemory(userId, "user", message.content);
     
-    const reply = await getAIResponse(mem, image?.url);
-    
-    mem.push({ role: "assistant", content: reply });
-    if (mem.length > CONFIG.MAX_MEMORY * 2) mem.splice(0, 2);
-    userMemory.set(message.author.id, mem);
-    
+    // Direct Axios call to Groq (More stable on Render)
+    const response = await axios.post(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: "أنت مساعد ذكاء اصطناعي ذكي اسمك NexusAI. تحدث دائماً بلغة المستخدم وتذكر كل شيء يخبرك به." },
+          ...getMemory(userId),
+        ],
+      },
+      {
+        headers: {
+          "Authorization": `Bearer ${CONFIG.GROQ_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 30000, // 30 seconds timeout
+      }
+    );
+
+    const reply = response.data.choices[0].message.content;
+    addToMemory(userId, "assistant", reply);
     botStats.messagesHandled++;
+    
     if (reply.length > 2000) {
       const chunks = reply.match(/.{1,1900}/gs) || [];
       for (const chunk of chunks) await message.reply(chunk);
@@ -98,64 +104,72 @@ client.on("messageCreate", async (message) => {
     }
   } catch (err) {
     botStats.errors++;
-    message.reply("⚠️ كل السيرفرات مضغوطة حالياً، حاول مرة ثانية بعد ثواني!");
+    console.error("Groq API Error:", err.response?.data || err.message);
+    message.reply("⚠️ خطأ في الاتصال بالذكاء الاصطناعي المجاني. تأكد من الـ API Key.");
   }
 });
 
+// ─── DASHBOARD (EXPRESS) ─────────────────────────────────────
 const app = express();
 app.use(express.json());
 app.use(session({ secret: CONFIG.SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: true } }));
 app.set('trust proxy', 1);
 
 app.get("/login", (req, res) => {
-  const p = new URLSearchParams({ client_id: CONFIG.DISCORD_CLIENT_ID, redirect_uri: `${CONFIG.DASHBOARD_URL}/auth/discord/callback`, response_type: "code", scope: "identify guilds" });
-  res.redirect(`https://discord.com/api/oauth2/authorize?${p}`);
+  const params = new URLSearchParams({ client_id: CONFIG.DISCORD_CLIENT_ID, redirect_uri: `${CONFIG.DASHBOARD_URL}/auth/discord/callback`, response_type: "code", scope: "identify guilds" });
+  res.redirect(`https://discord.com/api/oauth2/authorize?${params}`);
 });
 
 app.get("/auth/discord/callback", async (req, res) => {
+  const { code } = req.query;
   try {
-    const t = await axios.post("https://discord.com/api/oauth2/token", new URLSearchParams({ client_id: CONFIG.DISCORD_CLIENT_ID, client_secret: CONFIG.DISCORD_CLIENT_SECRET, grant_type: "authorization_code", code: req.query.code, redirect_uri: `${CONFIG.DASHBOARD_URL}/auth/discord/callback` }));
-    const u = await axios.get("https://discord.com/api/users/@me", { headers: { Authorization: `Bearer ${t.data.access_token}` } });
-    const g = await axios.get("https://discord.com/api/users/@me/guilds", { headers: { Authorization: `Bearer ${t.data.access_token}` } });
-    req.session.user = u.data;
-    req.session.guilds = g.data.filter(x => (BigInt(x.permissions) & BigInt(0x8)) === BigInt(0x8));
+    const tokenRes = await axios.post("https://discord.com/api/oauth2/token", new URLSearchParams({ client_id: CONFIG.DISCORD_CLIENT_ID, client_secret: CONFIG.DISCORD_CLIENT_SECRET, grant_type: "authorization_code", code, redirect_uri: `${CONFIG.DASHBOARD_URL}/auth/discord/callback` }));
+    const { access_token } = tokenRes.data;
+    const [userRes, guildsRes] = await Promise.all([
+      axios.get("https://discord.com/api/users/@me", { headers: { Authorization: `Bearer ${access_token}` } }),
+      axios.get("https://discord.com/api/users/@me/guilds", { headers: { Authorization: `Bearer ${access_token}` } }),
+    ]);
+    req.session.user = userRes.data;
+    req.session.guilds = guildsRes.data.filter((g) => (BigInt(g.permissions) & BigInt(0x8)) === BigInt(0x8));
     res.redirect("/dashboard");
-  } catch (e) { res.redirect("/login"); }
+  } catch (err) { res.redirect("/login"); }
 });
 
 app.get("/api/me", (req, res) => res.json({ user: req.session.user, guilds: req.session.guilds || [] }));
+app.get("/api/stats", (req, res) => res.json({ messages: botStats.messagesHandled, ping: client.ws.ping }));
 app.get("/api/guild/:id/channels", (req, res) => {
-  const g = client.guilds.cache.get(req.params.id);
-  res.json({ channels: g ? g.channels.cache.filter(c => c.type === 0).map(c => ({id:c.id, name:c.name})) : [] });
+  const guild = client.guilds.cache.get(req.params.id);
+  res.json({ channels: guild ? guild.channels.cache.filter(c => c.type === 0).map(c => ({id:c.id, name:c.name})) : [] });
 });
 app.post("/api/guild/:id/channel/toggle", (req, res) => {
   if (!aiChannels.has(req.params.id)) aiChannels.set(req.params.id, new Set());
-  const s = aiChannels.get(req.params.id);
-  const a = s.has(req.body.channelId) ? (s.delete(req.body.channelId), false) : (s.add(req.body.channelId), true);
-  res.json({ active: a });
+  const set = aiChannels.get(req.params.id);
+  const active = set.has(req.body.channelId) ? (set.delete(req.body.channelId), false) : (set.add(req.body.channelId), true);
+  res.json({ active });
 });
 
-app.get("/", (req, res) => req.session.user ? res.redirect("/dashboard") : res.send('<body style="background:#0a0a0f;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif"><div style="text-align:center"><h1>🧠 NexusAI Unstoppable</h1><a href="/login" style="background:#5865f2;color:#fff;padding:15px 30px;border-radius:10px;text-decoration:none;font-weight:bold">Login with Discord</a></div></body>'));
-app.get("/dashboard", (req, res) => res.send(`<!DOCTYPE html>
+app.get("/", (req, res) => req.session.user ? res.redirect("/dashboard") : res.send('<body style="background:#0a0a0f;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif"><div style="text-align:center"><h1>⚡ NexusAI Stable Free</h1><a href="/login" style="background:#5865f2;color:#fff;padding:15px 30px;border-radius:10px;text-decoration:none;font-weight:bold">تسجيل الدخول بـ Discord</a></div></body>'));
+app.get("/dashboard", (req, res) => req.session.user ? res.send(`<!DOCTYPE html>
 <html lang="ar" dir="rtl">
-<head><meta charset="UTF-8"><title>NexusAI Pro Dashboard</title>
-<style>body{font-family:sans-serif;background:#0a0a0f;color:#fff;display:flex;margin:0}aside{width:250px;background:#111;padding:1rem;height:100vh}main{flex:1;padding:2rem}.g{padding:10px;cursor:pointer;margin-bottom:5px;background:#222;border-radius:5px}</style>
+<head><meta charset="UTF-8"><title>NexusAI Stable Dashboard</title>
+<style>body{font-family:sans-serif;background:#0a0a0f;color:#fff;display:flex;min-height:100vh;margin:0}aside{width:250px;background:#111;padding:1rem;border-left:1px solid #333}main{flex:1;padding:2rem}.guild{padding:10px;cursor:pointer;border-radius:5px;margin-bottom:5px}.guild:hover{background:#222}.active{background:#7c3aed !important}</style>
 </head>
 <body>
-<aside id="L">Loading...</aside><main id="M"><h1>Pro Dashboard 🔥</h1></main>
+<aside id="gList">جاري التحميل...</aside>
+<main id="main"><h1>اختر سيرفر 🔥 (Stable Free)</h1></main>
 <script>
 async function load(){
   const r = await fetch('/api/me'); const {user, guilds} = await r.json();
-  document.getElementById('L').innerHTML = guilds.map(g => \`<div class="g" onclick="sel('\${g.id}', '\${g.name}')">\${g.name}</div>\`).join('');
+  document.getElementById('gList').innerHTML = guilds.map(g => \`<div class="guild" onclick="sel('\${g.id}', '\${g.name}')">\${g.name}</div>\`).join('');
 }
 async function sel(id, name){
   const r = await fetch(\`/api/guild/\${id}/channels\`); const {channels} = await r.json();
-  document.getElementById('M').innerHTML = \`<h2>\${name}</h2>\` + channels.map(c => \`<div style="display:flex;justify-content:space-between;padding:10px;background:#111;margin:5px">\${c.name} <button onclick="tog('\${id}','\${c.id}')">Toggle AI</button></div>\`).join('');
+  document.getElementById('main').innerHTML = \`<h2>\${name}</h2>\` + channels.map(c => \`<div style="display:flex;justify-content:space-between;padding:10px;background:#111;margin:5px">\${c.name} <button onclick="tog('\${id}','\${c.id}')">تفعيل/تعطيل</button></div>\`).join('');
 }
-async function tog(gid, cid){ await fetch(\`/api/guild/\${gid}/channel/toggle\`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channelId:cid})}); alert('Done!'); }
+async function tog(gid, cid){ await fetch(\`/api/guild/\${gid}/channel/toggle\`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channelId:cid})}); alert('تم التحديث!'); }
 load();
 </script>
-</body></html>`));
+</body></html>`) : res.redirect("/"));
 
-http.createServer(app).listen(CONFIG.DASHBOARD_PORT, () => console.log("🔥 Unstoppable Dashboard Ready"));
+http.createServer(app).listen(CONFIG.DASHBOARD_PORT, () => console.log("🔥 Stable Free Dashboard Ready"));
 client.login(CONFIG.DISCORD_TOKEN);
