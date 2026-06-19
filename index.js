@@ -1,5 +1,5 @@
 // ============================================================
-//  🤖 NexusAI Bot — FREE EDITION (Groq API)
+//  🤖 NexusAI Bot — STABLE FREE EDITION (Groq + Axios)
 //  Dashboard | Memory | Multi-Language | 100% Free
 // ============================================================
 
@@ -7,7 +7,6 @@ const { Client, GatewayIntentBits, Partials, ActivityType } = require("discord.j
 const express = require("express");
 const session = require("express-session");
 const axios = require("axios");
-const OpenAI = require("openai"); // Groq uses OpenAI SDK format
 const http = require("http");
 
 // ─── CONFIG ──────────────────────────────────────────────────
@@ -15,18 +14,12 @@ const CONFIG = {
   DISCORD_TOKEN: process.env.DISCORD_TOKEN,
   DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
   DISCORD_CLIENT_SECRET: process.env.DISCORD_CLIENT_SECRET,
-  GROQ_API_KEY: process.env.GROQ_API_KEY, // Use Groq for Free AI
+  GROQ_API_KEY: process.env.GROQ_API_KEY,
   DASHBOARD_PORT: process.env.PORT || 3000,
   DASHBOARD_URL: process.env.DASHBOARD_URL,
-  SESSION_SECRET: process.env.SESSION_SECRET || "nexus-free-secret",
+  SESSION_SECRET: process.env.SESSION_SECRET || "nexus-stable-secret",
   MAX_MEMORY: 15,
 };
-
-// ─── GROQ CLIENT (FREE & FAST) ───────────────────────────────
-const groq = new OpenAI({
-  apiKey: CONFIG.GROQ_API_KEY,
-  baseURL: "https://api.groq.com/openai/v1",
-});
 
 // ─── DISCORD CLIENT ──────────────────────────────────────────
 const client = new Client({
@@ -57,7 +50,8 @@ function addToMemory(userId, role, content) {
 
 // ─── DISCORD HANDLERS ────────────────────────────────────────
 client.once("ready", () => {
-  console.log(`✅ Free AI Bot Online: ${client.user.tag}`);
+  console.log(`✅ Stable Free AI Bot Online: ${client.user.tag}`);
+  client.user.setActivity("🤖 Free AI Chat", { type: ActivityType.Watching });
 });
 
 client.on("messageCreate", async (message) => {
@@ -78,22 +72,40 @@ client.on("messageCreate", async (message) => {
 
   try {
     addToMemory(userId, "user", message.content);
-    const response = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile", // Free, Fast, Powerful
-      messages: [
-        { role: "system", content: "أنت مساعد ذكاء اصطناعي ذكي اسمك NexusAI. تحدث دائماً بلغة المستخدم وتذكر كل شيء يخبرك به." },
-        ...getMemory(userId),
-      ],
-    });
+    
+    // Direct Axios call to Groq (More stable on Render)
+    const response = await axios.post(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: "أنت مساعد ذكاء اصطناعي ذكي اسمك NexusAI. تحدث دائماً بلغة المستخدم وتذكر كل شيء يخبرك به." },
+          ...getMemory(userId),
+        ],
+      },
+      {
+        headers: {
+          "Authorization": `Bearer ${CONFIG.GROQ_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 30000, // 30 seconds timeout
+      }
+    );
 
-    const reply = response.choices[0].message.content;
+    const reply = response.data.choices[0].message.content;
     addToMemory(userId, "assistant", reply);
     botStats.messagesHandled++;
-    message.reply(reply.length > 2000 ? reply.substring(0, 1990) + "..." : reply);
+    
+    if (reply.length > 2000) {
+      const chunks = reply.match(/.{1,1900}/gs) || [];
+      for (const chunk of chunks) await message.reply(chunk);
+    } else {
+      await message.reply(reply);
+    }
   } catch (err) {
     botStats.errors++;
-    console.error("Groq Error:", err.message);
-    message.reply("⚠️ خطأ في الاتصال بالذكاء الاصطناعي المجاني.");
+    console.error("Groq API Error:", err.response?.data || err.message);
+    message.reply("⚠️ خطأ في الاتصال بالذكاء الاصطناعي المجاني. تأكد من الـ API Key.");
   }
 });
 
@@ -123,7 +135,6 @@ app.get("/auth/discord/callback", async (req, res) => {
   } catch (err) { res.redirect("/login"); }
 });
 
-// API & HTML (Simplified for brevity but fully functional)
 app.get("/api/me", (req, res) => res.json({ user: req.session.user, guilds: req.session.guilds || [] }));
 app.get("/api/stats", (req, res) => res.json({ messages: botStats.messagesHandled, ping: client.ws.ping }));
 app.get("/api/guild/:id/channels", (req, res) => {
@@ -137,14 +148,15 @@ app.post("/api/guild/:id/channel/toggle", (req, res) => {
   res.json({ active });
 });
 
-const DASHBOARD_HTML = `<!DOCTYPE html>
+app.get("/", (req, res) => req.session.user ? res.redirect("/dashboard") : res.send('<body style="background:#0a0a0f;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif"><div style="text-align:center"><h1>⚡ NexusAI Stable Free</h1><a href="/login" style="background:#5865f2;color:#fff;padding:15px 30px;border-radius:10px;text-decoration:none;font-weight:bold">تسجيل الدخول بـ Discord</a></div></body>'));
+app.get("/dashboard", (req, res) => req.session.user ? res.send(`<!DOCTYPE html>
 <html lang="ar" dir="rtl">
-<head><meta charset="UTF-8"><title>NexusAI Free Dashboard</title>
+<head><meta charset="UTF-8"><title>NexusAI Stable Dashboard</title>
 <style>body{font-family:sans-serif;background:#0a0a0f;color:#fff;display:flex;min-height:100vh;margin:0}aside{width:250px;background:#111;padding:1rem;border-left:1px solid #333}main{flex:1;padding:2rem}.guild{padding:10px;cursor:pointer;border-radius:5px;margin-bottom:5px}.guild:hover{background:#222}.active{background:#7c3aed !important}</style>
 </head>
 <body>
 <aside id="gList">جاري التحميل...</aside>
-<main id="main"><h1>اختر سيرفر 🔥 (نسخة مجانية)</h1></main>
+<main id="main"><h1>اختر سيرفر 🔥 (Stable Free)</h1></main>
 <script>
 async function load(){
   const r = await fetch('/api/me'); const {user, guilds} = await r.json();
@@ -157,10 +169,7 @@ async function sel(id, name){
 async function tog(gid, cid){ await fetch(\`/api/guild/\${gid}/channel/toggle\`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channelId:cid})}); alert('تم التحديث!'); }
 load();
 </script>
-</body></html>`;
+</body></html>`) : res.redirect("/"));
 
-app.get("/", (req, res) => req.session.user ? res.redirect("/dashboard") : res.send('<body style="background:#0a0a0f;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif"><div style="text-align:center"><h1>⚡ NexusAI Free</h1><a href="/login" style="background:#5865f2;color:#fff;padding:15px 30px;border-radius:10px;text-decoration:none;font-weight:bold">تسجيل الدخول بـ Discord</a></div></body>'));
-app.get("/dashboard", (req, res) => req.session.user ? res.send(DASHBOARD_HTML) : res.redirect("/"));
-
-http.createServer(app).listen(CONFIG.DASHBOARD_PORT, () => console.log("🔥 Free Dashboard Ready"));
+http.createServer(app).listen(CONFIG.DASHBOARD_PORT, () => console.log("🔥 Stable Free Dashboard Ready"));
 client.login(CONFIG.DISCORD_TOKEN);
