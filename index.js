@@ -378,8 +378,10 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
         document.getElementById(tabName + 'Tab').style.display = 'block';
         
         // استخدام الطريقة الصحيحة لتحديد الزر النشط بدون الاعتماد على event.target المبهمة
-        const activeBtn = document.querySelector(`.tab-button[onclick*="${tabName}"]`);
-        if (activeBtn) activeBtn.classList.add('active');
+       // ✅ ضَع هذه الأسطر البديلة المصححة:
+const activeBtn = document.querySelector('.tab-button[onclick*="' + tabName + '"]');
+if (activeBtn) activeBtn.classList.add('active');
+
 
         if (tabName === 'config') loadConfig();
         if (tabName === 'stats') loadStats();
