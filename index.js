@@ -376,7 +376,7 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
         document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
         document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
         document.getElementById(tabName + 'Tab').style.display = 'block';
-        document.querySelector(`.tab-button[onclick="showTab('${tabName}')"]`).classList.add('active');
+        document.querySelector(".tab-button[onclick=\"showTab('" + tabName + "')\"]").classList.add('active');
 
         if (tabName === 'config') loadConfig();
         if (tabName === 'stats') loadStats();
@@ -385,22 +385,22 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
       async function load(){
         const r = await fetch('/api/me');
         const {guilds, user} = await r.json();
-        document.querySelector('.nav div:last-child').innerText = `أهلاً، ${user.username}`;
-        document.getElementById('guildList').innerHTML = guilds.map(g => `<div class="guild-card" id="g-${g.id}" onclick="selectGuild('${g.id}', '${g.name}')"><img src="${g.icon ? 'https://cdn.discordapp.com/icons/'+g.id+'/'+g.icon+'.png' : 'https://cdn.discordapp.com/embed/avatars/0.png'}" style="width:40px;border-radius:8px"><span>${g.name}</span></div>`).join('');
+        document.querySelector('.nav div:last-child').innerText = "أهلاً، " + user.username;
+        document.getElementById('guildList').innerHTML = guilds.map(g => '<div class="guild-card" id="g-' + g.id + '" onclick="selectGuild(\'' + g.id + '\', \'' + g.name + '\')"><img src="' + (g.icon ? 'https://cdn.discordapp.com/icons/' + g.id + '/' + g.icon + '.png' : 'https://cdn.discordapp.com/embed/avatars/0.png') + '" style="width:40px;border-radius:8px"><span>' + g.name + '</span></div>').join('');
       }
 
       async function selectGuild(id, name){
         currentGuildId = id;
         document.querySelectorAll('.guild-card').forEach(el => el.classList.remove('active'));
         document.getElementById('g-'+id).classList.add('active');
-        const r = await fetch(`/api/guild/${id}/channels`);
+        const r = await fetch('/api/guild/' + id + '/channels');
         const {channels} = await r.json();
-        document.getElementById('channelsTab').innerHTML = `<h1 style="margin-bottom:2rem">إدارة: ${name} 🔥</h1><div style="display:grid;gap:15px">` + 
-          channels.map(c => `<div class="channel-row"><span style="font-size:1.2rem;font-weight:bold"># ${c.name}</span><button class="btn ${c.isActive ? 'btn-active' : 'btn-inactive'}" id="btn-${c.id}" onclick="toggleChannel('${id}','${c.id}')">${c.isActive ? 'إيقاف الذكاء' : 'تفعيل الذكاء'}</button></div>`).join('') + '</div>';
+        document.getElementById('channelsTab').innerHTML = '<h1 style="margin-bottom:2rem">إدارة: ' + name + ' 🔥</h1><div style="display:grid;gap:15px">' + 
+          channels.map(c => '<div class="channel-row"><span style="font-size:1.2rem;font-weight:bold"># ' + c.name + '</span><button class="btn ' + (c.isActive ? 'btn-active' : 'btn-inactive') + '" id="btn-' + c.id + '" onclick="toggleChannel(\'' + id + '\',\'' + c.id + '\')">' + (c.isActive ? 'إيقاف الذكاء' : 'تفعيل الذكاء') + '</button></div>').join('') + '</div>';
       }
 
       async function toggleChannel(gid, cid){
-        const r = await fetch(`/api/guild/${gid}/channel/toggle`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channelId:cid})});
+        const r = await fetch('/api/guild/' + gid + '/channel/toggle', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channelId:cid})});
         const {active} = await r.json();
         const btn = document.getElementById('btn-'+cid);
         btn.innerText = active ? 'إيقاف الذكاء' : 'تفعيل الذكاء';
