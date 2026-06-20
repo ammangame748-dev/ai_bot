@@ -1,27 +1,19 @@
 {
-  "name": "nexusai-bot",
+  "name": "x-gamer-bot",
   "version": "1.0.0",
-  "description": "Discord bot with advanced AI features and dashboard",
-  "main": "index.js",
+  "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "node --watch index.js"
   },
-  "keywords": [
-    "discord",
-    "bot",
-    "ai",
-    "groq",
-    "nexusai",
-    "dashboard"
-  ],
-  "author": "Manus AI",
-  "license": "MIT",
   "dependencies": {
-    "axios": "^1.7.2",
-    "discord.js": "^14.15.3",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "express-session": "^1.18.0",
-    "nedb": "^1.8.0"
+    "discord.js": "^14.14.0",
+    "dotenv": "^16.3.1",
+    "groq-sdk": "^1.2.1",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "axios": "^1.18.0",
+    "body-parser": "^2.3.0",
+    "fs": "^0.0.1-security" 
   }
 }
