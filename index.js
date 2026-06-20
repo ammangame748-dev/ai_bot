@@ -103,10 +103,9 @@ client.on('messageCreate', async (message) => {
       if (err) reject(err); else resolve(doc || CONFIG);
     });
   });
-
   // Clear user memory command
   if (message.content === '!clear') {
-    usersDB.remove({ userId: message.author.id }, {}, (err, numRemoved) => {
+    usersDB.remove({ userId: message.author.id }, { multi: true }, (err) => {
       if (err) {
         console.error('Error clearing user memory:', err);
         message.reply('⚠️ حدث خطأ أثناء مسح الذاكرة.');
@@ -116,6 +115,7 @@ client.on('messageCreate', async (message) => {
     });
     return;
   }
+
 
   await message.channel.sendTyping();
 
@@ -373,14 +373,18 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
       let currentGuildId = null;
 
       function showTab(tabName) {
-        document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
-        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+        document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
         document.getElementById(tabName + 'Tab').style.display = 'block';
-        document.querySelector(".tab-button[onclick=\"showTab('" + tabName + "')\"]").classList.add('active');
+        
+        // استخدام الطريقة الصحيحة لتحديد الزر النشط بدون الاعتماد على event.target المبهمة
+        const activeBtn = document.querySelector(`.tab-button[onclick*="${tabName}"]`);
+        if (activeBtn) activeBtn.classList.add('active');
 
         if (tabName === 'config') loadConfig();
         if (tabName === 'stats') loadStats();
       }
+
 
       async function load(){
         try {
@@ -389,7 +393,7 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
           const {guilds, user} = await r.json();
           document.querySelector('.nav div:last-child').innerText = "أهلاً، " + (user ? user.username : 'مستخدم');
           if (guilds && guilds.length > 0) {
-            document.getElementById('guildList').innerHTML = guilds.map(g => '<div class="guild-card" id="g-' + g.id + '" onclick="selectGuild(\'' + g.id + '\', \'' + g.name.replace(/'/g, "\\'") + '\')"><img src="' + (g.icon ? 'https://cdn.discordapp.com/icons/' + g.id + '/' + g.icon + '.png' : 'https://cdn.discordapp.com/embed/avatars/0.png') + '" style="width:40px;border-radius:8px"><span>' + g.name + '</span></div>').join('');
+            document.getElementById('guildList').innerHTML = guilds.map(g => '<div class="guild-card" id="g-' + g.id + '" onclick="selectGuild(\'' + g.id + '\', \'' + g.name.replace(/'/g, "\\'") + '\')"><img src="' + (g.icon ? 'https://discordapp.com' + g.id + '/' + g.icon + '.png' : 'https://discordapp.com') + '" style="width:40px;border-radius:8px"><span>' + g.name + '</span></div>').join('');
           } else {
             document.getElementById('guildList').innerHTML = '<div style="padding:10px;text-align:center">لا توجد سيرفرات متاحة (تأكد من وجود صلاحية إدارة السيرفر)</div>';
           }
@@ -398,6 +402,7 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
           document.getElementById('guildList').innerHTML = '<div style="padding:10px;text-align:center;color:var(--on)">خطأ في تحميل البيانات</div>';
         }
       }
+
 
       async function selectGuild(id, name){
         try {
@@ -410,8 +415,8 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
           
           const r = await fetch('/api/guild/' + id + '/channels');
           if (!r.ok) throw new Error('فشل تحميل القنوات');
-          const {channels} = await r.json();
-          
+           const data = await r.json(); const channels = data.channels;
+
           if (channels && channels.length > 0) {
             document.getElementById('channelsTab').innerHTML = '<h1 style="margin-bottom:2rem">إدارة: ' + name + ' 🔥</h1><div style="display:grid;gap:15px">' + 
               channels.map(c => '<div class="channel-row"><span style="font-size:1.2rem;font-weight:bold"># ' + c.name + '</span><button class="btn ' + (c.isActive ? 'btn-active' : 'btn-inactive') + '" id="btn-' + c.id + '" onclick="toggleChannel(\'' + id + '\',\'' + c.id + '\')">' + (c.isActive ? 'إيقاف الذكاء' : 'تفعيل الذكاء') + '</button></div>').join('') + '</div>';
@@ -425,12 +430,23 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
       }
 
       async function toggleChannel(gid, cid){
-        const r = await fetch('/api/guild/' + gid + '/channel/toggle', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channelId:cid})});
-        const {active} = await r.json();
-        const btn = document.getElementById('btn-'+cid);
-        btn.innerText = active ? 'إيقاف الذكاء' : 'تفعيل الذكاء';
-        btn.className = active ? 'btn btn-active' : 'btn btn-inactive';
+        try {
+          const r = await fetch('/api/guild/' + gid + '/channel/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channelId: cid })
+          });
+          const data = await r.json();
+          const btn = document.getElementById('btn-' + cid);
+          if (btn) {
+            btn.innerText = data.active ? 'إيقاف الذكاء' : 'تفعيل الذكاء';
+            btn.className = data.active ? 'btn btn-active' : 'btn btn-inactive';
+          }
+        } catch (e) {
+          console.error('Toggle Error:', e);
+        }
       }
+
 
       async function loadConfig() {
         const r = await fetch('/api/config');
@@ -465,10 +481,31 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
             statusElem.style.color = 'var(--on)';
             statusElem.innerText = 'فشل حفظ الإعدادات: ' + (result.error || 'خطأ غير معروف');
           }
-        } catch (e) {
+         } catch (e) {
           statusElem.style.color = 'var(--on)';
           statusElem.innerText = 'خطأ في الاتصال: ' + e.message;
         }
+      }
+
+      async function loadStats() {
+        try {
+          const r = await fetch('/api/stats');
+          const stats = await r.json();
+          document.getElementById('messagesHandled').innerText = stats.messagesHandled || 0;
+          document.getElementById('errors').innerText = stats.errors || 0;
+          document.getElementById('uptime').innerText = stats.uptime || '0h';
+          if (document.getElementById('discordGuilds')) {
+            document.getElementById('discordGuilds').innerText = stats.discordGuilds || 0;
+          }
+        } catch (e) {
+          console.error('Stats Load Error:', e);
+        }
+      }
+
+      load();
+      showTab('channels');
+    </script>
+
       }
 
       async function loadStats() {
