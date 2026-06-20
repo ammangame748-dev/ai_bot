@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 
 import dotenv from 'dotenv';
 dotenv.config();
@@ -618,6 +619,10 @@ function isAuthenticated(req, res, next) {
     }
     res.redirect("/login");
 }
+
+app.get("/", (req, res) => {
+    res.redirect("/login");
+});
 
 // Login route
 app.get("/login", (req, res) => {
