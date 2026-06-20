@@ -1,35 +1,51 @@
 #!/usr/bin/env node
 
+/**
+ * ✨ ULTIMATE DISCORD AI BOT ✨
+ * Rebuilt from scratch for maximum stability and performance.
+ * Features: AI Chat (Groq), Web Dashboard, Server/Channel Management, Persistence.
+ */
+
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Client, GatewayIntentBits, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
+import { 
+    Client, 
+    GatewayIntentBits, 
+    EmbedBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    ActionRowBuilder,
+    ChannelType
+} from 'discord.js';
 import Groq from 'groq-sdk';
 import express from 'express';
 import session from 'express-session';
 import axios from 'axios';
 import bodyParser from 'body-parser';
 import { promises as fs } from 'fs';
+import path from 'path';
 
-// --- Discord Bot Setup ---
+// --- CONFIGURATION & CONSTANTS ---
+const PORT = process.env.PORT || 3000;
+const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
+const BOT_PREFIX = process.env.BOT_PREFIX || '!';
+const SETTINGS_FILE = path.resolve('bot_settings.json');
+
+// --- BOT INITIALIZATION ---
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.MessageContent, // REQUIRED: Enable in Discord Dev Portal
         GatewayIntentBits.DirectMessages,
     ],
 });
 
-const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY
-});
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-const BOT_PREFIX = process.env.BOT_PREFIX || '!';
-const ADMIN_USER_ID = process.env.ADMIN_USER_ID; // Discord User ID for admin
-
-// Store conversation history and bot settings
-const userConversations = new Map(); // userId -> [{ role: 'user', content: '...' }, { role: 'assistant', content: '...' }]
+// --- STATE MANAGEMENT ---
+const userConversations = new Map();
 let botSettings = {
     enabledChannels: [],
     botActive: true,
@@ -38,19 +54,20 @@ let botSettings = {
     startTime: Date.now(),
 };
 
-const SETTINGS_FILE = 'bot_settings.json';
-
+// --- DATA PERSISTENCE ---
 async function loadSettings() {
     try {
         const data = await fs.readFile(SETTINGS_FILE, 'utf8');
-        botSettings = { ...botSettings, ...JSON.parse(data) };
-        console.log('Bot settings loaded.');
+        const parsed = JSON.parse(data);
+        // Merge with defaults to handle schema updates
+        botSettings = { ...botSettings, ...parsed };
+        console.log('[SYSTEM] Settings loaded successfully.');
     } catch (error) {
         if (error.code === 'ENOENT') {
-            console.log('Settings file not found, creating default.');
+            console.log('[SYSTEM] No settings file found. Using defaults.');
             await saveSettings();
         } else {
-            console.error('Failed to load bot settings:', error);
+            console.error('[ERROR] Failed to load settings:', error);
         }
     }
 }
@@ -58,700 +75,330 @@ async function loadSettings() {
 async function saveSettings() {
     try {
         await fs.writeFile(SETTINGS_FILE, JSON.stringify(botSettings, null, 2), 'utf8');
-        console.log('Bot settings saved.');
+        console.log('[SYSTEM] Settings saved to disk.');
     } catch (error) {
-        console.error('Failed to save bot settings:', error);
+        console.error('[ERROR] Failed to save settings:', error);
     }
 }
 
+// --- DISCORD EVENT HANDLERS ---
 client.once('ready', async () => {
-    console.log(`Logged in as ${client.user.tag}!`);
+    console.log(`[BOT] Logged in as ${client.user.tag}`);
     await loadSettings();
-    // Set bot presence
-    client.user.setActivity('مع جروك', { type: 3 }); // 3 = Watching
+    client.user.setActivity('مساعدك الذكي ✨', { type: 3 }); // Watching
 });
 
-client.on('messageCreate', async message => {
+client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
-    if (!botSettings.botActive || !botSettings.enabledChannels.includes(message.channel.id)) {
-        return; // Bot is inactive or channel is not enabled
-    }
 
+    // Check if bot is active globally
+    if (!botSettings.botActive) return;
+
+    // Check if channel is enabled
+    if (!botSettings.enabledChannels.includes(message.channel.id)) return;
+
+    // Handle Prefix
     if (message.content.startsWith(BOT_PREFIX)) {
-        const userMessage = message.content.slice(BOT_PREFIX.length).trim();
+        const userQuery = message.content.slice(BOT_PREFIX.length).trim();
+        if (!userQuery) return;
 
-        // Get or initialize conversation history for the user
-        let conversation = userConversations.get(message.author.id) || [];
+        console.log(`[CHAT] Processing request from ${message.author.tag} in #${message.channel.name}`);
 
-        // Add user message to history
-        conversation.push({ role: 'user', content: userMessage });
+        // Maintain Context
+        let history = userConversations.get(message.author.id) || [];
+        history.push({ role: 'user', content: userQuery });
+        if (history.length > 12) history = history.slice(-12);
+        userConversations.set(message.author.id, history);
 
-        // Keep conversation history to a reasonable length (e.g., last 10 messages)
-        if (conversation.length > 10) {
-            conversation = conversation.slice(conversation.length - 10);
-        }
-
-        userConversations.set(message.author.id, conversation);
-
-        const startTime = Date.now();
-        let groqResponseContent = 'حدث خطأ أثناء معالجة طلبك.';
-        let dataConsumed = 0;
+        // Show Typing Indicator
+        await message.channel.sendTyping();
 
         try {
-            const chatCompletion = await groq.chat.completions.create({
+            const completion = await groq.chat.completions.create({
                 messages: [
-                    { role: 'system', content: 'أنت بوت ديسكورد عربي فخم ومرح، تتحدث بثقة وتستخدم إيموجيات ديسكورد متناسقة. مهمتك هي مساعدة المستخدمين والإجابة على أسئلتهم بذكاء وإبداع. أنت متصل بموديل Llama 3.1.' },
-                    ...conversation
+                    { 
+                        role: 'system', 
+                        content: 'أنت بوت ديسكورد عربي ذكي ومحترف. ردودك يجب أن تكون منسقة، واضحة، ومدعومة بالإيموجيات المناسبة. أنت تستخدم موديل Llama 3.1.' 
+                    },
+                    ...history
                 ],
                 model: 'llama3-8b-8192',
-                temperature: 0.7,
+                temperature: 0.6,
                 max_tokens: 1024,
             });
 
-            groqResponseContent = chatCompletion.choices[0]?.message?.content || groqResponseContent;
-            dataConsumed = chatCompletion.usage.total_tokens; // Example, adjust based on actual Groq API response
+            const aiResponse = completion.choices[0]?.message?.content || 'عذراً، لم أستطع توليد رد حالياً.';
+            const tokensUsed = completion.usage?.total_tokens || 0;
+
+            // Update Stats
             botSettings.totalQuestions++;
-            botSettings.totalDataConsumed += dataConsumed;
+            botSettings.totalDataConsumed += tokensUsed;
             await saveSettings();
 
-            // Add bot response to history
-            conversation.push({ role: 'assistant', content: groqResponseContent });
-            userConversations.set(message.author.id, conversation);
+            // Save AI Response to History
+            history.push({ role: 'assistant', content: aiResponse });
+            userConversations.set(message.author.id, history);
+
+            // Create Rich Embed
+            const responseEmbed = new EmbedBuilder()
+                .setColor('#5865F2')
+                .setTitle('🤖 رد الذكاء الاصطناعي')
+                .setDescription(aiResponse)
+                .setFooter({ 
+                    text: `استهلاك: ${tokensUsed} توكن | الأسئلة: ${botSettings.totalQuestions}`,
+                    iconURL: client.user.displayAvatarURL()
+                })
+                .setTimestamp();
+
+            // Action Buttons
+            const buttons = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('clear_chat').setLabel('مسح الذاكرة 🧹').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('bot_info').setLabel('إحصائيات 📊').setStyle(ButtonStyle.Primary)
+            );
+
+            await message.reply({ embeds: [responseEmbed], components: [buttons] });
 
         } catch (error) {
-            console.error('Error calling Groq API:', error);
-            groqResponseContent = 'عذراً، واجهت مشكلة في التواصل مع Groq AI. يرجى المحاولة مرة أخرى لاحقاً.';
+            console.error('[AI ERROR]', error);
+            await message.reply('❌ حدث خطأ أثناء الاتصال بمحرك الذكاء الاصطناعي.');
         }
-
-        const endTime = Date.now();
-        const responseTime = endTime - startTime;
-
-        const embed = new EmbedBuilder()
-            .setColor('#0099ff') // Discord blue
-            .setTitle('✨ رد البوت السريع ✨')
-            .setDescription(groqResponseContent)
-            .setFooter({
-                text: `زمن الاستجابة: ${responseTime}ms | استهلاك البيانات: ${dataConsumed} توكنز`,
-                iconURL: client.user.displayAvatarURL(),
-            })
-            .setTimestamp();
-
-        // Add server icon or GIF if available (example, needs actual implementation)
-        if (message.guild && message.guild.iconURL()) {
-            embed.setThumbnail(message.guild.iconURL());
-        } else {
-            // You can set a default GIF here if no guild icon
-            // embed.setImage('URL_TO_YOUR_DEFAULT_GIF');
-        }
-
-        const clearMemoryButton = new ButtonBuilder()
-            .setCustomId('clear_memory')
-            .setLabel('مسح الذاكرة 🗑️')
-            .setStyle(ButtonStyle.Danger);
-
-        const usageStatsButton = new ButtonBuilder()
-            .setCustomId('usage_stats')
-            .setLabel('إحصائيات الاستخدام 📊')
-            .setStyle(ButtonStyle.Primary);
-
-        const row = new ActionRowBuilder()
-            .addComponents(clearMemoryButton, usageStatsButton);
-
-        await message.reply({ embeds: [embed], components: [row] });
     }
 });
 
-client.on('interactionCreate', async interaction => {
+client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
 
-    if (interaction.customId === 'clear_memory') {
+    if (interaction.customId === 'clear_chat') {
         userConversations.delete(interaction.user.id);
-        await interaction.reply({ content: 'تم مسح ذاكرتك بنجاح! يمكنك البدء بمحادثة جديدة.', ephemeral: true });
-    } else if (interaction.customId === 'usage_stats') {
-        const uptimeSeconds = Math.floor((Date.now() - botSettings.startTime) / 1000);
-        const uptimeString = `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m ${uptimeSeconds % 60}s`;
-
-        await interaction.reply({
-            content: `**إحصائيات استخدام البوت:**\n- عدد الأسئلة الكلي: ${botSettings.totalQuestions}\n- إجمالي استهلاك البيانات: ${botSettings.totalDataConsumed} توكنز\n- وقت تشغيل البوت: ${uptimeString}`,
-            ephemeral: true
+        await interaction.reply({ content: '✅ تم مسح ذاكرة المحادثة الخاصة بك.', ephemeral: true });
+    } else if (interaction.customId === 'bot_info') {
+        const uptime = Math.floor((Date.now() - botSettings.startTime) / 1000);
+        const h = Math.floor(uptime / 3600);
+        const m = Math.floor((uptime % 3600) / 60);
+        await interaction.reply({ 
+            content: `**إحصائيات البوت:**\n• إجمالي الأسئلة: ${botSettings.totalQuestions}\n• وقت التشغيل: ${h} ساعة و ${m} دقيقة`,
+            ephemeral: true 
         });
     }
 });
 
-// --- Web Dashboard Setup ---
+// --- WEB DASHBOARD (EXPRESS) ---
 const app = express();
-const PORT = process.env.PORT || 3000;
-const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
-const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const DISCORD_REDIRECT_URI = process.env.CALLBACK_URL || `http://localhost:${PORT}/auth/discord/callback`;
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'supersecretkey',
+    secret: process.env.SESSION_SECRET || 'manus-ultra-secret',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false } // Set to true in production with HTTPS
+    cookie: { secure: false } // Set true if using HTTPS
 }));
 
-// Embedded CSS
-const embeddedCss = `
-body {
-    font-family: Arial, sans-serif;
-    background-color: #2c2f33; /* Discord dark background */
-    color: #ffffff; /* White text */
-    margin: 0;
-    padding: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    direction: rtl; /* Right-to-left for Arabic */
-    text-align: right;
-}
+// Auth Middleware
+const isAuth = (req, res, next) => req.session.user ? next() : res.redirect('/login');
 
-.container {
-    display: flex;
-    width: 90%;
-    max-width: 1200px;
-    background-color: #36393f; /* Discord darker grey */
-    border-radius: 8px;
-    box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
-    overflow: hidden;
-}
-
-.sidebar {
-    width: 250px;
-    background-color: #23272a; /* Even darker grey for sidebar */
-    padding: 20px;
-    border-left: 1px solid #2c2f33;
-    text-align: center;
-}
-
-.sidebar h2 {
-    color: #7289da; /* Discord blue */
-    margin-bottom: 15px;
-}
-
-.sidebar .avatar {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    margin-bottom: 15px;
-    border: 2px solid #7289da;
-}
-
-.sidebar hr {
-    border-color: #4f545c;
-    margin: 20px 0;
-}
-
-.sidebar h3 {
-    color: #99aab5; /* Light grey */
-    margin-bottom: 10px;
-}
-
-.sidebar p {
-    font-size: 0.9em;
-    margin-bottom: 5px;
-}
-
-.bot-status {
-    font-weight: bold;
-}
-
-.bot-status.online {
-    color: #43b581; /* Green */
-}
-
-.bot-status.offline {
-    color: #f04747; /* Red */
-}
-
-.logout-button {
-    display: block;
-    background-color: #f04747; /* Red */
-    color: white;
-    padding: 10px 15px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    text-decoration: none;
-    margin-top: 20px;
-    transition: background-color 0.3s ease;
-}
-
-.logout-button:hover {
-    background-color: #cc3c3c;
-}
-
-.main-content {
-    flex-grow: 1;
-    padding: 20px;
-}
-
-h1 {
-    color: #7289da;
-    text-align: center;
-    margin-bottom: 30px;
-}
-
-.card {
-    background-color: #2f3136; /* Discord grey */
-    padding: 20px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-}
-
-.card h3 {
-    color: #ffffff;
-    margin-top: 0;
-    margin-bottom: 15px;
-    border-bottom: 1px solid #4f545c;
-    padding-bottom: 10px;
-}
-
-.form-group {
-    margin-bottom: 15px;
-}
-
-label {
-    display: block;
-    margin-bottom: 5px;
-    color: #99aab5;
-}
-
-select, input[type="text"] {
-    width: 100%;
-    padding: 10px;
-    border-radius: 5px;
-    border: 1px solid #4f545c;
-    background-color: #40444b;
-    color: #ffffff;
-    box-sizing: border-box;
-}
-
-select:focus, input[type="text"]:focus {
-    border-color: #7289da;
-    outline: none;
-}
-
-.discord-login-button {
-    display: inline-block;
-    background-color: #7289da; /* Discord blue */
-    color: white;
-    padding: 12px 25px;
-    border: none;
-    border-radius: 5px;
-    font-size: 1.1em;
-    cursor: pointer;
-    text-decoration: none;
-    transition: background-color 0.3s ease;
-    margin-top: 20px;
-}
-
-.discord-login-button:hover {
-    background-color: #677bc4;
-}
-
-.error-message {
-    color: #f04747;
-    background-color: #5c2d2d;
-    padding: 10px;
-    border-radius: 5px;
-    margin-bottom: 15px;
-}
-
-.switch {
-    position: relative;
-    display: inline-block;
-    width: 60px;
-    height: 34px;
-    margin-left: 10px;
-    vertical-align: middle;
-}
-
-.switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #ccc;
-    -webkit-transition: .4s;
-    transition: .4s;
-}
-
-.slider:before {
-    position: absolute;
-    content: "";
-    height: 26px;
-    width: 26px;
-    left: 4px;
-    bottom: 4px;
-    background-color: white;
-    -webkit-transition: .4s;
-    transition: .4s;
-}
-
-input:checked + .slider {
-    background-color: #7289da;
-}
-
-input:focus + .slider {
-    box-shadow: 0 0 1px #7289da;
-}
-
-input:checked + .slider:before {
-    -webkit-transform: translateX(26px);
-    -ms-transform: translateX(26px);
-    transform: translateX(-26px); /* Adjusted for RTL */
-}
-
-/* Rounded sliders */
-.slider.round {
-    border-radius: 34px;
-}
-
-.slider.round:before {
-    border-radius: 50%;
-}
-
-#botStatusText {
-    vertical-align: middle;
-    font-weight: bold;
-    margin-right: 10px;
-}
-
-.channel-list {
-    max-height: 200px;
-    overflow-y: auto;
-    border: 1px solid #4f545c;
-    border-radius: 5px;
-    padding: 10px;
-    background-color: #40444b;
-    margin-bottom: 15px;
-}
-
-.channel-item {
-    display: block;
-    margin-bottom: 8px;
-    cursor: pointer;
-}
-
-.channel-item input[type="checkbox"] {
-    margin-left: 10px; /* Adjusted for RTL */
-    width: auto;
-}
-
-.save-button {
-    background-color: #43b581; /* Green */
-    color: white;
-    padding: 10px 20px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-}
-
-.save-button:hover {
-    background-color: #36946f;
-}
+// --- UI COMPONENTS ---
+const CSS = `
+:root { --primary: #5865F2; --bg: #232428; --card: #2B2D31; --text: #DBDEE1; --success: #248046; --danger: #DA373C; }
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; direction: rtl; }
+.nav { background: #1E1F22; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+.container { max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+.card { background: var(--card); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid #3F4147; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
+.stat-box { background: #1E1F22; padding: 1rem; border-radius: 6px; text-align: center; }
+.stat-val { display: block; font-size: 1.5rem; font-weight: bold; color: var(--primary); }
+.btn { padding: 0.6rem 1.2rem; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; text-decoration: none; display: inline-block; }
+.btn-primary { background: var(--primary); color: white; }
+.btn-danger { background: var(--danger); color: white; }
+.btn-success { background: var(--success); color: white; }
+.switch { position: relative; display: inline-block; width: 50px; height: 26px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #4E5058; transition: .4s; border-radius: 34px; }
+.slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 4px; background: white; transition: .4s; border-radius: 50%; }
+input:checked + .slider { background: var(--success); }
+input:checked + .slider:before { transform: translateX(24px); }
+select, .channel-list { width: 100%; padding: 0.8rem; background: #1E1F22; border: 1px solid #3F4147; color: white; border-radius: 4px; margin-top: 0.5rem; }
+.channel-item { display: flex; align-items: center; padding: 0.5rem; border-bottom: 1px solid #3F4147; }
+.channel-item:last-child { border: none; }
+.channel-item input { margin-left: 10px; }
 `;
 
-// Embedded Login HTML
-const loginHtml = (query) => `
+const Layout = (title, content, user = null) => `
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تسجيل الدخول - بوت ديسكورد</title>
-    <style>${embeddedCss}</style>
+    <title>${title} | AI Bot</title>
+    <style>${CSS}</style>
 </head>
 <body>
-    <div class="container">
-        <div class="card">
+    <div class="nav">
+        <div style="font-weight: bold; font-size: 1.2rem;">🤖 AI Dashboard</div>
+        ${user ? `<div><span>مرحباً، ${user.username}</span> <a href="/logout" class="btn btn-danger" style="margin-right: 15px; font-size: 0.8rem;">خروج</a></div>` : ''}
+    </div>
+    <div class="container">${content}</div>
+</body>
+</html>
+`;
+
+// --- ROUTES ---
+app.get('/', (req, res) => res.redirect('/dashboard'));
+
+app.get('/login', (req, res) => {
+    if (req.session.user) return res.redirect('/dashboard');
+    const error = req.query.error ? `<div style="color: var(--danger); margin-bottom: 1rem;">❌ خطأ: ${req.query.error}</div>` : '';
+    res.send(Layout('تسجيل الدخول', `
+        <div class="card" style="max-width: 400px; margin: 5rem auto; text-align: center;">
             <h2>تسجيل الدخول</h2>
-            ${query.error ? `
-                <p class="error-message">
-                    ${query.error === 'no_code' ? 'خطأ: لم يتم استلام رمز المصادقة من ديسكورد.' : ''}
-                    ${query.error === 'oauth_failed' ? 'خطأ: فشلت عملية المصادقة مع ديسكورد. يرجى المحاولة مرة أخرى.' : ''}
-                    ${query.error === 'not_admin' ? 'خطأ: أنت لست المسؤول المعتمد لهذا البوت.' : ''}
-                    ${!['no_code', 'oauth_failed', 'not_admin'].includes(query.error) ? `حدث خطأ غير معروف: ${query.error}` : ''}
-                </p>
-            ` : ''}
-            <a href="/auth/discord" class="discord-login-button">
-                تسجيل الدخول باستخدام ديسكورد
-            </a>
+            ${error}
+            <p>يرجى تسجيل الدخول بحساب المسؤول للوصول للوحة التحكم.</p>
+            <a href="/auth/discord" class="btn btn-primary" style="width: 100%; box-sizing: border-box;">الدخول عبر Discord</a>
         </div>
-    </div>
-</body>
-</html>
-`;
-
-// Embedded Dashboard HTML
-const dashboardHtml = (data) => `
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لوحة تحكم بوت ديسكورد</title>
-    <style>${embeddedCss}</style>
-</head>
-<body>
-    <div class="container">
-        <div class="sidebar">
-            <h2>مرحباً، ${data.user.username}</h2>
-            <img src="https://cdn.discordapp.com/avatars/${data.user.id}/${data.user.avatar}.png?size=128" alt="Avatar" class="avatar">
-            <a href="/logout" class="logout-button">تسجيل الخروج</a>
-            <hr>
-            <h3>إحصائيات البوت</h3>
-            <p>حالة البوت: <span class="bot-status ${data.botStatus === 'متصل' ? 'online' : 'offline'}">${data.botStatus}</span></p>
-            <p>الأسئلة الكلية: ${data.totalQuestions}</p>
-            <p>استهلاك البيانات: ${data.totalDataConsumed} توكنز</p>
-            <p>وقت التشغيل: ${data.uptime}</p>
-        </div>
-        <div class="main-content">
-            <h1>لوحة تحكم بوت ديسكورد</h1>
-
-            <div class="card">
-                <h3>التحكم بالبوت</h3>
-                <label class="switch">
-                    <input type="checkbox" id="botToggle" ${data.botSettings.botActive ? 'checked' : ''}>
-                    <span class="slider round"></span>
-                </label>
-                <span id="botStatusText">${data.botSettings.botActive ? 'البوت مفعل' : 'البوت معطل'}</span>
-            </div>
-
-            <div class="card">
-                <h3>اختيار السيرفر والقنوات</h3>
-                <form id="guildSelectForm">
-                    <label for="guildSelect">اختر سيرفر:</label>
-                    <select id="guildSelect" name="guildId" onchange="this.form.submit()">
-                        <option value="">-- اختر سيرفر --</option>
-                        ${data.guilds.map(guild => `
-                            <option value="${guild.id}" ${data.selectedGuildId === guild.id ? 'selected' : ''}>${guild.name}</option>
-                        `).join('')}
-                    </select>
-                </form>
-
-                ${data.selectedGuildId ? `
-                    <form id="channelSettingsForm">
-                        <h4>قنوات الدردشة في السيرفر المحدد:</h4>
-                        <div class="channel-list">
-                            ${data.channels.length > 0 ? `
-                                ${data.channels.map(channel => `
-                                    <label class="channel-item">
-                                        <input type="checkbox" name="enabledChannels" value="${channel.id}" ${data.botSettings.enabledChannels.includes(channel.id) ? 'checked' : ''}>
-                                        #${channel.name}
-                                    </label>
-                                `).join('')}
-                            ` : `
-                                <p>لا توجد قنوات نصية في هذا السيرفر.</p>
-                            `}
-                        </div>
-                        <button type="submit" class="save-button">حفظ إعدادات القنوات</button>
-                    </form>
-                ` : `
-                    <p>الرجاء اختيار سيرفر لعرض القنوات.</p>
-                `}
-            </div>
-        </div>
-    </div>
-
-    <script>
-        document.getElementById("botToggle").addEventListener("change", async function() {
-            const botActive = this.checked;
-            const response = await fetch("/api/settings", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ botActive }),
-            });
-            const data = await response.json();
-            if (data.success) {
-                document.getElementById("botStatusText").textContent = botActive ? "البوت مفعل" : "البوت معطل";
-                alert("تم تحديث حالة البوت بنجاح!");
-            } else {
-                alert("فشل تحديث حالة البوت.");
-            }
-        });
-
-        document.getElementById("channelSettingsForm")?.addEventListener("submit", async function(event) {
-            event.preventDefault();
-            const checkboxes = document.querySelectorAll("input[name='enabledChannels']:checked");
-            const enabledChannels = Array.from(checkboxes).map(cb => cb.value);
-
-            const response = await fetch("/api/settings", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ enabledChannels }),
-            });
-            const data = await response.json();
-            if (data.success) {
-                alert("تم حفظ إعدادات القنوات بنجاح!");
-            } else {
-                alert("فشل حفظ إعدادات القنوات.");
-            }
-        });
-    </script>
-</body>
-</html>
-`;
-
-// Middleware to check if user is authenticated
-function isAuthenticated(req, res, next) {
-    if (req.session.user) {
-        return next();
-    }
-    res.redirect("/login");
-}
-
-app.get("/", (req, res) => {
-    res.redirect("/login");
+    `));
 });
 
-// Login route
-app.get("/login", (req, res) => {
-    res.send(loginHtml(req.query));
+app.get('/auth/discord', (req, res) => {
+    const url = `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.CALLBACK_URL)}&response_type=code&scope=identify%20guilds`;
+    res.redirect(url);
 });
 
-// Discord OAuth2 login
-app.get("/auth/discord", (req, res) => {
-    const authorizeURL = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}&response_type=code&scope=identify%20guilds`;
-    res.redirect(authorizeURL);
-});
-
-// Discord OAuth2 callback
-app.get("/auth/discord/callback", async (req, res) => {
-    const code = req.query.code;
-    if (!code) {
-        return res.redirect("/login?error=no_code");
-    }
+app.get('/auth/discord/callback', async (req, res) => {
+    const { code } = req.query;
+    if (!code) return res.redirect('/login?error=no_code');
 
     try {
-        const tokenResponse = await axios.post("https://discord.com/api/oauth2/token", new URLSearchParams({
-            client_id: DISCORD_CLIENT_ID,
-            client_secret: DISCORD_CLIENT_SECRET,
-            grant_type: "authorization_code",
-            code: code,
-            redirect_uri: DISCORD_REDIRECT_URI,
-            scope: "identify guilds",
-        }).toString(), {
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-        });
+        const tokenResponse = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({
+            client_id: process.env.DISCORD_CLIENT_ID,
+            client_secret: process.env.DISCORD_CLIENT_SECRET,
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: process.env.CALLBACK_URL,
+        }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
 
         const { access_token, token_type } = tokenResponse.data;
+        const user = (await axios.get('https://discord.com/api/users/@me', { headers: { Authorization: `${token_type} ${access_token}` } })).data;
+        const guilds = (await axios.get('https://discord.com/api/users/@me/guilds', { headers: { Authorization: `${token_type} ${access_token}` } })).data;
 
-        const userResponse = await axios.get("https://discord.com/api/users/@me", {
-            headers: {
-                authorization: `${token_type} ${access_token}`,
-            },
-        });
+        if (user.id !== ADMIN_USER_ID) return res.redirect('/login?error=not_admin');
 
-        const userGuildsResponse = await axios.get("https://discord.com/api/users/@me/guilds", {
-            headers: {
-                authorization: `${token_type} ${access_token}`,
-            },
-        });
-
-        // Check if the authenticated user is the admin
-        if (userResponse.data.id !== ADMIN_USER_ID) {
-            return res.redirect("/login?error=not_admin");
-        }
-
-        req.session.user = userResponse.data;
-        req.session.guilds = userGuildsResponse.data;
-        res.redirect("/dashboard");
-
-    } catch (error) {
-        console.error("Error during Discord OAuth2 callback:", error.response ? error.response.data : error.message);
-        res.redirect("/login?error=oauth_failed");
+        req.session.user = user;
+        req.session.guilds = guilds;
+        res.redirect('/dashboard');
+    } catch (err) {
+        console.error(err);
+        res.redirect('/login?error=auth_failed');
     }
 });
 
-// Logout route
-app.get("/logout", (req, res) => {
-    req.session.destroy(err => {
-        if (err) {
-            console.error("Error destroying session:", err);
-        }
-        res.redirect("/login");
-    });
+app.get('/logout', (req, res) => {
+    req.session.destroy();
+    res.redirect('/login');
 });
 
-// Dashboard route
-app.get("/dashboard", isAuthenticated, async (req, res) => {
-    const guilds = req.session.guilds;
+app.get('/dashboard', isAuth, async (req, res) => {
     const botGuilds = client.guilds.cache;
-    const availableGuilds = guilds.filter(g => botGuilds.has(g.id));
-
+    const adminGuilds = req.session.guilds.filter(g => botGuilds.has(g.id));
+    
+    const selectedGuildId = req.query.guildId;
     let channels = [];
-    if (req.query.guildId) {
-        const selectedGuild = client.guilds.cache.get(req.query.guildId);
-        if (selectedGuild) {
-            channels = selectedGuild.channels.cache
-                .filter(channel => channel.type === 0) // Text channels
-                .map(channel => ({ id: channel.id, name: channel.name }));
+    if (selectedGuildId) {
+        const guild = botGuilds.get(selectedGuildId);
+        if (guild) {
+            channels = guild.channels.cache
+                .filter(c => c.type === ChannelType.GuildText)
+                .map(c => ({ id: c.id, name: c.name }));
         }
     }
 
-    const uptimeSeconds = Math.floor((Date.now() - botSettings.startTime) / 1000);
-    const uptimeString = `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m ${uptimeSeconds % 60}s`;
+    const uptime = Math.floor((Date.now() - botSettings.startTime) / 1000);
+    const uptimeStr = `${Math.floor(uptime/3600)}س ${Math.floor((uptime%3600)/60)}د`;
 
-    res.send(dashboardHtml({
-        user: req.session.user,
-        guilds: availableGuilds,
-        channels: channels,
-        botSettings: botSettings,
-        selectedGuildId: req.query.guildId || null,
-        botStatus: client.isReady() ? "متصل" : "غير متصل",
-        totalQuestions: botSettings.totalQuestions,
-        totalDataConsumed: botSettings.totalDataConsumed,
-        uptime: uptimeString,
-    }));
+    const content = `
+        <div class="grid">
+            <div class="card stat-box">
+                <span class="stat-val">${botSettings.totalQuestions}</span>
+                <span>إجمالي الأسئلة</span>
+            </div>
+            <div class="card stat-box">
+                <span class="stat-val">${uptimeStr}</span>
+                <span>وقت التشغيل</span>
+            </div>
+            <div class="card stat-box">
+                <span class="stat-val" style="color: ${client.isReady() ? 'var(--success)' : 'var(--danger)'}">${client.isReady() ? 'متصل' : 'أوفلاين'}</span>
+                <span>حالة البوت</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3>تفعيل البوت</h3>
+                <label class="switch">
+                    <input type="checkbox" id="activeToggle" ${botSettings.botActive ? 'checked' : ''}>
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>إعدادات السيرفر والقنوات</h3>
+            <form action="/dashboard" method="GET">
+                <label>اختر السيرفر:</label>
+                <select name="guildId" onchange="this.form.submit()">
+                    <option value="">-- اختر سيرفر --</option>
+                    ${adminGuilds.map(g => `<option value="${g.id}" ${selectedGuildId === g.id ? 'selected' : ''}>${g.name}</option>`).join('')}
+                </select>
+            </form>
+
+            ${selectedGuildId ? `
+                <div style="margin-top: 1.5rem;">
+                    <label>قنوات الدردشة المتاحة:</label>
+                    <div class="channel-list" id="channelList">
+                        ${channels.map(c => `
+                            <div class="channel-item">
+                                <input type="checkbox" value="${c.id}" ${botSettings.enabledChannels.includes(c.id) ? 'checked' : ''}>
+                                <span># ${c.name}</span>
+                            </div>
+                        `).join('')}
+                        ${channels.length === 0 ? '<p>لا توجد قنوات نصية متاحة.</p>' : ''}
+                    </div>
+                    <button class="btn btn-success" style="margin-top: 1rem; width: 100%;" onclick="saveChannels()">حفظ إعدادات القنوات ✅</button>
+                </div>
+            ` : ''}
+        </div>
+
+        <script>
+            document.getElementById('activeToggle').addEventListener('change', async (e) => {
+                await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ botActive: e.target.checked })
+                });
+            });
+
+            async function saveChannels() {
+                const checkboxes = document.querySelectorAll('#channelList input:checked');
+                const enabledChannels = Array.from(checkboxes).map(cb => cb.value);
+                const res = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabledChannels })
+                });
+                if (res.ok) alert('تم الحفظ بنجاح!');
+            }
+        </script>
+    `;
+    res.send(Layout('لوحة التحكم', content, req.session.user));
 });
 
-// API to update bot settings
-app.post("/api/settings", isAuthenticated, async (req, res) => {
-    const { enabledChannels, botActive } = req.body;
-
-    if (enabledChannels !== undefined) {
-        botSettings.enabledChannels = enabledChannels;
-    }
-    if (botActive !== undefined) {
-        botSettings.botActive = botActive === "true"; // Convert string to boolean
-    }
-
+app.post('/api/settings', isAuth, async (req, res) => {
+    const { botActive, enabledChannels } = req.body;
+    if (botActive !== undefined) botSettings.botActive = !!botActive;
+    if (enabledChannels !== undefined) botSettings.enabledChannels = enabledChannels;
     await saveSettings();
-    res.json({ success: true, botSettings });
+    res.json({ success: true });
 });
 
-// Serve embedded CSS directly
-app.get('/style.css', (req, res) => {
-    res.setHeader('Content-Type', 'text/css');
-    res.send(embeddedCss);
-});
-
-// Start the web server
-app.listen(PORT, () => {
-    console.log(`Web dashboard running on http://localhost:${PORT}`);
-});
-
-// Login to Discord with your client's token
-client.login(process.env.DISCORD_TOKEN);
+// --- STARTUP ---
+app.listen(PORT, () => console.log(`[WEB] Dashboard active on port ${PORT}`));
+client.login(process.env.DISCORD_TOKEN).catch(err => console.error('[BOT] Login failed:', err));
