@@ -177,10 +177,10 @@ client.on("interactionCreate", async interaction => {
 
 // --- Web Dashboard Setup ---
 const app = express();
-const PORT = process.env.WEB_PORT || 3000;
+const PORT = process.env.PORT || 3000;
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const DISCORD_REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || `http://localhost:${PORT}/auth/discord/callback`;
+const DISCORD_REDIRECT_URI = process.env.CALLBACK_URL || `http://localhost:${PORT}/auth/discord/callback`;
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -747,4 +747,4 @@ app.listen(PORT, () => {
 });
 
 // Login to Discord with your client's token
-client.login(process.env.DISCORD_BOT_TOKEN);
+client.login(process.env.DISCORD_TOKEN);
