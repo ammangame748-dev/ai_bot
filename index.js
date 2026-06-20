@@ -1,12 +1,14 @@
 
-require("dotenv").config();
-const { Client, GatewayIntentBits, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require("discord.js");
-const Groq = require("groq-sdk");
-const express = require("express");
-const session = require("express-session");
-const axios = require("axios");
-const bodyParser = require("body-parser");
-const fs = require("fs").promises;
+import dotenv from 'dotenv';
+dotenv.config();
+
+import { Client, GatewayIntentBits, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
+import Groq from 'groq-sdk';
+import express from 'express';
+import session from 'express-session';
+import axios from 'axios';
+import bodyParser from 'body-parser';
+import { promises as fs } from 'fs';
 
 // --- Discord Bot Setup ---
 const client = new Client({
@@ -22,7 +24,7 @@ const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY
 });
 
-const BOT_PREFIX = process.env.BOT_PREFIX || "!";
+const BOT_PREFIX = process.env.BOT_PREFIX || '!';
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID; // Discord User ID for admin
 
 // Store conversation history and bot settings
@@ -35,40 +37,40 @@ let botSettings = {
     startTime: Date.now(),
 };
 
-const SETTINGS_FILE = "bot_settings.json";
+const SETTINGS_FILE = 'bot_settings.json';
 
 async function loadSettings() {
     try {
-        const data = await fs.readFile(SETTINGS_FILE, "utf8");
+        const data = await fs.readFile(SETTINGS_FILE, 'utf8');
         botSettings = { ...botSettings, ...JSON.parse(data) };
-        console.log("Bot settings loaded.");
+        console.log('Bot settings loaded.');
     } catch (error) {
-        if (error.code === "ENOENT") {
-            console.log("Settings file not found, creating default.");
+        if (error.code === 'ENOENT') {
+            console.log('Settings file not found, creating default.');
             await saveSettings();
         } else {
-            console.error("Failed to load bot settings:", error);
+            console.error('Failed to load bot settings:', error);
         }
     }
 }
 
 async function saveSettings() {
     try {
-        await fs.writeFile(SETTINGS_FILE, JSON.stringify(botSettings, null, 2), "utf8");
-        console.log("Bot settings saved.");
+        await fs.writeFile(SETTINGS_FILE, JSON.stringify(botSettings, null, 2), 'utf8');
+        console.log('Bot settings saved.');
     } catch (error) {
-        console.error("Failed to save bot settings:", error);
+        console.error('Failed to save bot settings:', error);
     }
 }
 
-client.once("ready", async () => {
+client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
     await loadSettings();
     // Set bot presence
-    client.user.setActivity("مع جروك", { type: 3 }); // 3 = Watching
+    client.user.setActivity('مع جروك', { type: 3 }); // 3 = Watching
 });
 
-client.on("messageCreate", async message => {
+client.on('messageCreate', async message => {
     if (message.author.bot) return;
     if (!botSettings.botActive || !botSettings.enabledChannels.includes(message.channel.id)) {
         return; // Bot is inactive or channel is not enabled
@@ -81,7 +83,7 @@ client.on("messageCreate", async message => {
         let conversation = userConversations.get(message.author.id) || [];
 
         // Add user message to history
-        conversation.push({ role: "user", content: userMessage });
+        conversation.push({ role: 'user', content: userMessage });
 
         // Keep conversation history to a reasonable length (e.g., last 10 messages)
         if (conversation.length > 10) {
@@ -91,16 +93,16 @@ client.on("messageCreate", async message => {
         userConversations.set(message.author.id, conversation);
 
         const startTime = Date.now();
-        let groqResponseContent = "حدث خطأ أثناء معالجة طلبك.";
+        let groqResponseContent = 'حدث خطأ أثناء معالجة طلبك.';
         let dataConsumed = 0;
 
         try {
             const chatCompletion = await groq.chat.completions.create({
                 messages: [
-                    { role: "system", content: "أنت بوت ديسكورد عربي فخم ومرح، تتحدث بثقة وتستخدم إيموجيات ديسكورد متناسقة. مهمتك هي مساعدة المستخدمين والإجابة على أسئلتهم بذكاء وإبداع. أنت متصل بموديل Llama 3.1." },
+                    { role: 'system', content: 'أنت بوت ديسكورد عربي فخم ومرح، تتحدث بثقة وتستخدم إيموجيات ديسكورد متناسقة. مهمتك هي مساعدة المستخدمين والإجابة على أسئلتهم بذكاء وإبداع. أنت متصل بموديل Llama 3.1.' },
                     ...conversation
                 ],
-                model: "llama3-8b-8192",
+                model: 'llama3-8b-8192',
                 temperature: 0.7,
                 max_tokens: 1024,
             });
@@ -112,20 +114,20 @@ client.on("messageCreate", async message => {
             await saveSettings();
 
             // Add bot response to history
-            conversation.push({ role: "assistant", content: groqResponseContent });
+            conversation.push({ role: 'assistant', content: groqResponseContent });
             userConversations.set(message.author.id, conversation);
 
         } catch (error) {
-            console.error("Error calling Groq API:", error);
-            groqResponseContent = "عذراً، واجهت مشكلة في التواصل مع Groq AI. يرجى المحاولة مرة أخرى لاحقاً.";
+            console.error('Error calling Groq API:', error);
+            groqResponseContent = 'عذراً، واجهت مشكلة في التواصل مع Groq AI. يرجى المحاولة مرة أخرى لاحقاً.';
         }
 
         const endTime = Date.now();
         const responseTime = endTime - startTime;
 
         const embed = new EmbedBuilder()
-            .setColor("#0099ff") // Discord blue
-            .setTitle("✨ رد البوت السريع ✨")
+            .setColor('#0099ff') // Discord blue
+            .setTitle('✨ رد البوت السريع ✨')
             .setDescription(groqResponseContent)
             .setFooter({
                 text: `زمن الاستجابة: ${responseTime}ms | استهلاك البيانات: ${dataConsumed} توكنز`,
@@ -142,13 +144,13 @@ client.on("messageCreate", async message => {
         }
 
         const clearMemoryButton = new ButtonBuilder()
-            .setCustomId("clear_memory")
-            .setLabel("مسح الذاكرة 🗑️")
+            .setCustomId('clear_memory')
+            .setLabel('مسح الذاكرة 🗑️')
             .setStyle(ButtonStyle.Danger);
 
         const usageStatsButton = new ButtonBuilder()
-            .setCustomId("usage_stats")
-            .setLabel("إحصائيات الاستخدام 📊")
+            .setCustomId('usage_stats')
+            .setLabel('إحصائيات الاستخدام 📊')
             .setStyle(ButtonStyle.Primary);
 
         const row = new ActionRowBuilder()
@@ -158,13 +160,13 @@ client.on("messageCreate", async message => {
     }
 });
 
-client.on("interactionCreate", async interaction => {
+client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
-    if (interaction.customId === "clear_memory") {
+    if (interaction.customId === 'clear_memory') {
         userConversations.delete(interaction.user.id);
-        await interaction.reply({ content: "تم مسح ذاكرتك بنجاح! يمكنك البدء بمحادثة جديدة.", ephemeral: true });
-    } else if (interaction.customId === "usage_stats") {
+        await interaction.reply({ content: 'تم مسح ذاكرتك بنجاح! يمكنك البدء بمحادثة جديدة.', ephemeral: true });
+    } else if (interaction.customId === 'usage_stats') {
         const uptimeSeconds = Math.floor((Date.now() - botSettings.startTime) / 1000);
         const uptimeString = `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m ${uptimeSeconds % 60}s`;
 
@@ -185,7 +187,7 @@ const DISCORD_REDIRECT_URI = process.env.CALLBACK_URL || `http://localhost:${POR
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(session({
-    secret: process.env.SESSION_SECRET || "supersecretkey",
+    secret: process.env.SESSION_SECRET || 'supersecretkey',
     resave: false,
     saveUninitialized: false,
     cookie: { secure: false } // Set to true in production with HTTPS
@@ -587,7 +589,7 @@ const dashboardHtml = (data) => `
 
         document.getElementById("channelSettingsForm")?.addEventListener("submit", async function(event) {
             event.preventDefault();
-            const checkboxes = document.querySelectorAll("input[name=\'enabledChannels\"]:checked");
+            const checkboxes = document.querySelectorAll("input[name='enabledChannels']:checked");
             const enabledChannels = Array.from(checkboxes).map(cb => cb.value);
 
             const response = await fetch("/api/settings", {
