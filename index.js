@@ -291,7 +291,7 @@ const HTML_HEAD = `
     .nav { background: rgba(0,0,0,0.5); backdrop-filter: blur(10px); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); position: sticky; top: 0; z-index: 100; }
     .logo { font-size: 1.8rem; font-weight: 900; background: linear-gradient(135deg, #ff4d4d, #f9cb28); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 10px rgba(255,77,77,0.5)); }
     .container { display: flex; min-height: calc(100vh - 70px); }
-    .sidebar { width: 300px; background: rgba(255,255,255,0.03); border-right: 1px solid var(--border-color); padding: 2rem 1rem; overflow-y: auto; }
+    .sidebar { width: 300px; background: rgba(255,255,255,0.03); border-right: 1px solid var(--border-color); padding: 2rem 1rem; overflow-y: auto; min-height: calc(100vh - 70px); }
     .content { flex: 1; padding: 3rem; animation: fadeIn 0.5s ease; }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     .guild-card { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; margin-bottom: 12px; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 15px; }
@@ -383,20 +383,45 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
       }
 
       async function load(){
-        const r = await fetch('/api/me');
-        const {guilds, user} = await r.json();
-        document.querySelector('.nav div:last-child').innerText = "أهلاً، " + user.username;
-        document.getElementById('guildList').innerHTML = guilds.map(g => '<div class="guild-card" id="g-' + g.id + '" onclick="selectGuild(\'' + g.id + '\', \'' + g.name + '\')"><img src="' + (g.icon ? 'https://cdn.discordapp.com/icons/' + g.id + '/' + g.icon + '.png' : 'https://cdn.discordapp.com/embed/avatars/0.png') + '" style="width:40px;border-radius:8px"><span>' + g.name + '</span></div>').join('');
+        try {
+          const r = await fetch('/api/me');
+          if (!r.ok) throw new Error('فشل تحميل بيانات المستخدم');
+          const {guilds, user} = await r.json();
+          document.querySelector('.nav div:last-child').innerText = "أهلاً، " + (user ? user.username : 'مستخدم');
+          if (guilds && guilds.length > 0) {
+            document.getElementById('guildList').innerHTML = guilds.map(g => '<div class="guild-card" id="g-' + g.id + '" onclick="selectGuild(\'' + g.id + '\', \'' + g.name.replace(/'/g, "\\'") + '\')"><img src="' + (g.icon ? 'https://cdn.discordapp.com/icons/' + g.id + '/' + g.icon + '.png' : 'https://cdn.discordapp.com/embed/avatars/0.png') + '" style="width:40px;border-radius:8px"><span>' + g.name + '</span></div>').join('');
+          } else {
+            document.getElementById('guildList').innerHTML = '<div style="padding:10px;text-align:center">لا توجد سيرفرات متاحة (تأكد من وجود صلاحية إدارة السيرفر)</div>';
+          }
+        } catch (e) {
+          console.error('Load Error:', e);
+          document.getElementById('guildList').innerHTML = '<div style="padding:10px;text-align:center;color:var(--on)">خطأ في تحميل البيانات</div>';
+        }
       }
 
       async function selectGuild(id, name){
-        currentGuildId = id;
-        document.querySelectorAll('.guild-card').forEach(el => el.classList.remove('active'));
-        document.getElementById('g-'+id).classList.add('active');
-        const r = await fetch('/api/guild/' + id + '/channels');
-        const {channels} = await r.json();
-        document.getElementById('channelsTab').innerHTML = '<h1 style="margin-bottom:2rem">إدارة: ' + name + ' 🔥</h1><div style="display:grid;gap:15px">' + 
-          channels.map(c => '<div class="channel-row"><span style="font-size:1.2rem;font-weight:bold"># ' + c.name + '</span><button class="btn ' + (c.isActive ? 'btn-active' : 'btn-inactive') + '" id="btn-' + c.id + '" onclick="toggleChannel(\'' + id + '\',\'' + c.id + '\')">' + (c.isActive ? 'إيقاف الذكاء' : 'تفعيل الذكاء') + '</button></div>').join('') + '</div>';
+        try {
+          currentGuildId = id;
+          document.querySelectorAll('.guild-card').forEach(el => el.classList.remove('active'));
+          const activeCard = document.getElementById('g-'+id);
+          if (activeCard) activeCard.classList.add('active');
+          
+          document.getElementById('channelsTab').innerHTML = '<div style="text-align:center;margin-top:5vh">جاري تحميل القنوات...</div>';
+          
+          const r = await fetch('/api/guild/' + id + '/channels');
+          if (!r.ok) throw new Error('فشل تحميل القنوات');
+          const {channels} = await r.json();
+          
+          if (channels && channels.length > 0) {
+            document.getElementById('channelsTab').innerHTML = '<h1 style="margin-bottom:2rem">إدارة: ' + name + ' 🔥</h1><div style="display:grid;gap:15px">' + 
+              channels.map(c => '<div class="channel-row"><span style="font-size:1.2rem;font-weight:bold"># ' + c.name + '</span><button class="btn ' + (c.isActive ? 'btn-active' : 'btn-inactive') + '" id="btn-' + c.id + '" onclick="toggleChannel(\'' + id + '\',\'' + c.id + '\')">' + (c.isActive ? 'إيقاف الذكاء' : 'تفعيل الذكاء') + '</button></div>').join('') + '</div>';
+          } else {
+            document.getElementById('channelsTab').innerHTML = '<h1 style="margin-bottom:2rem">إدارة: ' + name + ' 🔥</h1><div style="text-align:center;margin-top:5vh">لا توجد قنوات نصية متاحة في هذا السيرفر أو أن البوت لا يملك صلاحية رؤيتها.</div>';
+          }
+        } catch (e) {
+          console.error('Select Guild Error:', e);
+          document.getElementById('channelsTab').innerHTML = '<div style="text-align:center;margin-top:5vh;color:var(--on)">خطأ في تحميل قنوات السيرفر</div>';
+        }
       }
 
       async function toggleChannel(gid, cid){
