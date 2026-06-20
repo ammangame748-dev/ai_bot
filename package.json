@@ -1,19 +1,27 @@
 {
-  "name": "nexusai-discord-bot",
+  "name": "nexusai-bot",
   "version": "1.0.0",
-  "description": "🤖 NexusAI — Discord AI Bot with Fire Dashboard",
+  "description": "Discord bot with advanced AI features and dashboard",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
+  "keywords": [
+    "discord",
+    "bot",
+    "ai",
+    "groq",
+    "nexusai",
+    "dashboard"
+  ],
+  "author": "Manus AI",
+  "license": "MIT",
   "dependencies": {
+    "axios": "^1.7.2",
     "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-session": "^1.18.0",
-    "openai": "^4.52.7",
-    "axios": "^1.7.2"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "nedb": "^1.8.0"
   }
 }
