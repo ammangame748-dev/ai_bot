@@ -64,7 +64,7 @@ client.on('messageCreate', async (message) => {
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: GROQ_MODEL,
             messages: [
-                { role: "system", content: "You are 'Ai bot', a highly advanced AI assistant. You must respond in the same language as the user. If they speak Arabic, respond in Arabic. If English, respond in English. Use emojis to make the conversation lively. You are knowledgeable about the latest news and can answer any question naturally. Always provide your main answer inside a professional Discord Embed format." },
+                { role: "system", content: "You are 'Ai bot', a highly advanced AI assistant. Respond naturally in the same language as the user (Arabic for Arabic, English for English). Use emojis to make the conversation lively. You know the latest news. IMPORTANT: Provide ONLY the text of your response. DO NOT wrap it in any code blocks, tags, or embed syntax. Just plain, beautiful text." },
                 { role: "user", content: message.content }
             ]
         }, {
