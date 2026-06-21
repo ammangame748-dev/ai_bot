@@ -1,4 +1,3 @@
-
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const express = require('express');
 const session = require('express-session');
@@ -6,7 +5,20 @@ const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 const axios = require('axios');
 const path = require('path');
-require('dotenv').config({ path: './config.env' });
+// require(\'dotenv\').config({ path: \'./config.env\' }); // Render handles env vars directly
+
+// Validate essential environment variables
+const requiredEnvVars = [\'DISCORD_TOKEN\', \'GROQ_API_KEY\', \'CLIENT_ID\', \'CLIENT_SECRET\', \'CALLBACK_URL\'];
+requiredEnvVars.forEach(envVar => {
+    if (!process.env[envVar]) {
+        console.error(`Error: Missing environment variable: ${envVar}`);
+        process.exit(1);
+    }
+});
+
+// Dynamic CALLBACK_URL for Render
+const CALLBACK_URL = process.env.CALLBACK_URL || `http://localhost:${PORT}/callback`;
+
 
 /**
  * CONFIGURATION & INITIALIZATION
@@ -94,7 +106,7 @@ passport.deserializeUser((obj, done) => done(null, obj));
 passport.use(new DiscordStrategy({
     clientID: process.env.CLIENT_ID,
     clientSecret: process.env.CLIENT_SECRET,
-    callbackURL: process.env.CALLBACK_URL,
+    callbackURL: CALLBACK_URL,
     scope: ['identify', 'guilds']
 }, (accessToken, refreshToken, profile, done) => {
     process.nextTick(() => done(null, profile));
