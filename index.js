@@ -1,4 +1,3 @@
-
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const express = require('express');
 const session = require('express-session');
@@ -185,7 +184,11 @@ app.get('/', (req, res) => {
 });
 
 app.get('/login', passport.authenticate('discord'));
-app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/dashboard'));
+// Support both /callback and /auth/discord/callback
+const callbackAuth = passport.authenticate('discord', { failureRedirect: '/' });
+app.get('/callback', callbackAuth, (req, res) => res.redirect('/dashboard'));
+app.get('/auth/discord/callback', callbackAuth, (req, res) => res.redirect('/dashboard'));
+
 
 app.get('/dashboard', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/');
