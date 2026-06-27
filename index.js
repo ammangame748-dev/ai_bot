@@ -33,7 +33,7 @@ const app = express();
 
 // Groq Configuration
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_MODEL = "llama-3.3-70b-versatile"; 
+const GROQ_MODEL = "groq/compound"; 
 
 // In-memory Database
 let botSettings = {
@@ -97,7 +97,7 @@ client.on('messageCreate', async (message) => {
             .setColor(botSettings.themeColor)
             .setAuthor({ name: 'Ai bot', iconURL: client.user.displayAvatarURL() })
             .setDescription(aiContent)
-            .setFooter({ text: 'Powered by Groq Llama 3.3 70B Versatile' })
+            .setFooter({ text: 'Powered by Groq Compound AI System with Web Search' })
             .setTimestamp();
 
         await message.reply({ embeds: [embed] });
