@@ -1,3 +1,4 @@
+
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const express = require('express');
 const session = require('express-session');
@@ -33,7 +34,7 @@ const app = express();
 
 // Groq Configuration
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_MODEL = "llama-3.3-70b-versatile"; 
+const GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e"; 
 
 // In-memory Database
 let botSettings = {
@@ -66,7 +67,7 @@ client.on('messageCreate', async (message) => {
 
         // Get or Initialize User History
         let history = userMemory.get(message.author.id) || [
-            { role: "system", content: "You are 'Ai bot', a highly advanced AI assistant. Respond naturally in the same language as the user (Arabic for Arabic, English for English). Use emojis to make the conversation lively. You know the latest news. IMPORTANT: Provide ONLY the text of your response. DO NOT wrap it in any code blocks, tags, or embed syntax. Just plain, beautiful text." }
+            { role: "system", content: "You are 'Ai bot', a highly advanced AI assistant. Respond naturally in the same language as the user (Arabic for Arabic, English for English).  You know the latest news. IMPORTANT: Provide ONLY the text of your response. DO NOT wrap it in any code blocks, tags, or embed syntax. Just plain, beautiful text." }
         ];
 
         // Add current user message to history
