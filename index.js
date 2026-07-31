@@ -3,7 +3,7 @@ const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
-const { Mistral } = require('@mistralai/mistralai');
+const axios = require('axios');
 const path = require('path');
 
 /**
@@ -18,9 +18,6 @@ requiredEnvVars.forEach(envVar => {
         console.error(`Error: Missing environment variable: ${envVar}`);
     }
 });
-
-// Initialize Mistral Client
-const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
 
 const client = new Client({
     intents: [
@@ -48,7 +45,7 @@ const userMemory = new Map();
  * DISCORD BOT LOGIC
  */
 client.on('ready', () => {
-    console.log(`Logged in as ${client.user.tag}! (Mistral 2026 Edition)`);
+    console.log(`Logged in as ${client.user.tag}! (Mistral Direct Edition)`);
 });
 
 client.on('messageCreate', async (message) => {
@@ -75,16 +72,23 @@ client.on('messageCreate', async (message) => {
         }
 
         /**
-         * MISTRAL CHAT WITH WEB SEARCH
-         * This uses the built-in websearch tool for real-time 2026 info.
+         * DIRECT API CALL TO MISTRAL
+         * Using Axios to avoid SDK validation issues while keeping Web Search.
          */
-        const chatResponse = await mistral.chat.complete({
+        const response = await axios.post('https://api.mistral.ai/v1/chat/completions', {
             model: "mistral-small-latest",
             messages: history,
-            tools: [{ type: "websearch" }] // Enabling the magic web search tool
+            tools: [{
+                type: "websearch"
+            }]
+        }, {
+            headers: {
+                'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`,
+                'Content-Type': 'application/json'
+            }
         });
 
-        const aiContent = chatResponse.choices[0].message.content;
+        const aiContent = response.data.choices[0].message.content;
 
         // Add AI response to history
         history.push({ role: "assistant", content: aiContent });
@@ -94,14 +98,14 @@ client.on('messageCreate', async (message) => {
             .setColor(botSettings.themeColor)
             .setAuthor({ name: 'Ai bot', iconURL: client.user.displayAvatarURL() })
             .setDescription(aiContent)
-            .setFooter({ text: 'Powered by Mistral AI (Infinite Web Search 2026)' })
+            .setFooter({ text: 'Powered by Mistral AI (Web Search 2026)' })
             .setTimestamp();
 
         await message.reply({ embeds: [embed] });
 
     } catch (error) {
-        console.error("AI Error:", error);
-        if (error.message && error.message.includes("429")) {
+        console.error("AI Error:", error.response ? JSON.stringify(error.response.data) : error.message);
+        if (error.response && error.response.status === 429) {
             message.reply("يا غالي، أنا حالياً مضغوط شوي. استنى دقيقة وجرب مرة ثانية! ⏳");
         } else {
             message.reply("عذراً، حدث خطأ أثناء معالجة طلبك.");
@@ -127,7 +131,7 @@ passport.use(new DiscordStrategy({
 }));
 
 app.use(session({
-    secret: 'ai-bot-mistral-secret',
+    secret: 'ai-bot-mistral-direct-secret',
     resave: false,
     saveUninitialized: false
 }));
@@ -148,7 +152,7 @@ const dashboardHTML = (user, guilds) => `
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
         body { background-color: #0a0a0a; color: #fff; font-family: 'Cairo', sans-serif; margin: 0; }
         .container { max-width: 900px; margin: 50px auto; padding: 30px; background: #1a1a1a; border-radius: 20px; border: 2px solid #f36d00; box-shadow: 0 0 40px rgba(243, 109, 0, 0.3); }
-        h1 { color: #f36d00; text-align: center; text-transform: uppercase; }
+        h1 { color: #f36d00; text-align: center; }
         .user-info { display: flex; align-items: center; justify-content: center; margin-bottom: 30px; }
         .user-info img { border-radius: 50%; border: 2px solid #f36d00; margin-left: 15px; width: 60px; }
         .form-group { margin-bottom: 20px; }
@@ -193,7 +197,6 @@ app.get('/', (req, res) => {
 
 app.get('/login', passport.authenticate('discord'));
 
-// SUPPORT BOTH CALLBACK URLS
 const callbackAuth = passport.authenticate('discord', { failureRedirect: '/' });
 app.get('/callback', callbackAuth, (req, res) => res.redirect('/dashboard'));
 app.get('/auth/discord/callback', callbackAuth, (req, res) => res.redirect('/dashboard'));
