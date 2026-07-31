@@ -33,7 +33,8 @@ const app = express();
 
 // Groq Configuration
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_MODEL = "llama-3.3-70b-versatile"; 
+// Updated to a more advanced model with broader capabilities and more recent knowledge
+const GROQ_MODEL = "groq/compound"; // Using Groq Compound for web search and code execution capabilities
 
 // In-memory Database
 let botSettings = {
@@ -66,15 +67,15 @@ client.on('messageCreate', async (message) => {
 
         // Get or Initialize User History
         let history = userMemory.get(message.author.id) || [
-            { role: "system", content: "You are 'Ai bot', a highly advanced AI assistant. Respond naturally in the same language as the user (Arabic for Arabic, English for English). Use emojis to make the conversation lively. You know the latest news. IMPORTANT: Provide ONLY the text of your response. DO NOT wrap it in any code blocks, tags, or embed syntax. Just plain, beautiful text." }
+            { role: "system", content: "You are 'Ai bot', a highly advanced AI assistant. Respond naturally in the same language as the user (Arabic for Arabic, English for English). Use emojis to make the conversation lively. You know the latest news and can perform web searches and code execution if needed. IMPORTANT: Provide ONLY the text of your response. DO NOT wrap it in any code blocks, tags, or embed syntax. Just plain, beautiful text." }
         ];
 
         // Add current user message to history
         history.push({ role: "user", content: message.content });
 
-        // Limit history to last 10 messages to keep context efficient (System + 10 messages)
-        if (history.length > 11) {
-            history = [history[0], ...history.slice(-10)];
+        // Limit history to last 20 messages to keep context efficient (System + 20 messages)
+        if (history.length > 21) {
+            history = [history[0], ...history.slice(-20)];
         }
 
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
@@ -97,7 +98,7 @@ client.on('messageCreate', async (message) => {
             .setColor(botSettings.themeColor)
             .setAuthor({ name: 'Ai bot', iconURL: client.user.displayAvatarURL() })
             .setDescription(aiContent)
-            .setFooter({ text: 'Powered by Groq Llama 3.3 70B' })
+            .setFooter({ text: `Powered by Groq ${GROQ_MODEL}` })
             .setTimestamp();
 
         await message.reply({ embeds: [embed] });
