@@ -193,7 +193,12 @@ app.get('/', (req, res) => {
 });
 
 app.get('/login', passport.authenticate('discord'));
-app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/dashboard'));
+
+// FIX: Added both routes to support any Callback URL configuration
+const callbackHandler = passport.authenticate('discord', { failureRedirect: '/' });
+app.get('/callback', callbackHandler, (req, res) => res.redirect('/dashboard'));
+app.get('/auth/discord/callback', callbackHandler, (req, res) => res.redirect('/dashboard'));
+
 app.get('/dashboard', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/');
     const adminGuilds = req.user.guilds.filter(g => (g.permissions & 0x8) === 0x8);
