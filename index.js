@@ -3,7 +3,7 @@ const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
-const axios = require('axios');
+const { Mistral } = require('@mistralai/mistralai');
 const path = require('path');
 
 /**
@@ -12,12 +12,15 @@ const path = require('path');
 const PORT = process.env.PORT || 3000;
 
 // Validate essential environment variables
-const requiredEnvVars = ['DISCORD_TOKEN', 'HF_TOKEN', 'CLIENT_ID', 'CLIENT_SECRET', 'CALLBACK_URL'];
+const requiredEnvVars = ['DISCORD_TOKEN', 'MISTRAL_API_KEY', 'CLIENT_ID', 'CLIENT_SECRET', 'CALLBACK_URL'];
 requiredEnvVars.forEach(envVar => {
     if (!process.env[envVar]) {
         console.error(`Error: Missing environment variable: ${envVar}`);
     }
 });
+
+// Initialize Mistral Client
+const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
 
 const client = new Client({
     intents: [
@@ -30,19 +33,11 @@ const client = new Client({
 
 const app = express();
 
-/**
- * MODEL SELECTION: Qwen/Qwen2.5-72B-Instruct
- * One of the most powerful open-source models in 2026.
- * Hugging Face provides massive free inference limits for this model.
- */
-const HF_MODEL = "Qwen/Qwen2.5-72B-Instruct";
-const HF_TOKEN = process.env.HF_TOKEN;
-
 // In-memory Database
 let botSettings = {
     allowedRoles: [],
     allowedChannels: [],
-    themeColor: "#7289da", // Discord Blurple for a clean look
+    themeColor: "#f36d00", // Mistral Orange
     prefix: "!"
 };
 
@@ -53,7 +48,7 @@ const userMemory = new Map();
  * DISCORD BOT LOGIC
  */
 client.on('ready', () => {
-    console.log(`Logged in as ${client.user.tag}! (Hugging Face Infinite Edition)`);
+    console.log(`Logged in as ${client.user.tag}! (Mistral 2026 Edition)`);
 });
 
 client.on('messageCreate', async (message) => {
@@ -69,33 +64,27 @@ client.on('messageCreate', async (message) => {
 
         // Get or Initialize User History
         let history = userMemory.get(message.author.id) || [
-            { role: "system", content: "You are 'Ai bot', a 2026 updated AI. You are highly intelligent, respond in the user's language (Arabic/English), and provide real-time information. Use emojis. Respond in plain text only." }
+            { role: "system", content: "You are 'Ai bot', a highly advanced AI assistant updated to 2026. You have access to Web Search. Respond naturally in the user's language (Arabic/English). Use emojis. IMPORTANT: Provide ONLY plain text responses." }
         ];
 
         history.push({ role: "user", content: message.content });
 
-        // Hugging Face handles large context well, but we keep it efficient at 15 messages
-        if (history.length > 16) {
-            history = [history[0], ...history.slice(-15)];
+        // Limit history to 10 messages for efficiency
+        if (history.length > 11) {
+            history = [history[0], ...history.slice(-10)];
         }
 
-        const response = await axios.post(
-            `https://api-inference.huggingface.co/models/${HF_MODEL}/v1/chat/completions`,
-            {
-                model: HF_MODEL,
-                messages: history,
-                max_tokens: 1500,
-                temperature: 0.7
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${HF_TOKEN}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
+        /**
+         * MISTRAL CHAT WITH WEB SEARCH
+         * This uses the built-in websearch tool for real-time 2026 info.
+         */
+        const chatResponse = await mistral.chat.complete({
+            model: "mistral-small-latest",
+            messages: history,
+            tools: [{ type: "websearch" }] // Enabling the magic web search tool
+        });
 
-        const aiContent = response.data.choices[0].message.content;
+        const aiContent = chatResponse.choices[0].message.content;
 
         // Add AI response to history
         history.push({ role: "assistant", content: aiContent });
@@ -105,14 +94,18 @@ client.on('messageCreate', async (message) => {
             .setColor(botSettings.themeColor)
             .setAuthor({ name: 'Ai bot', iconURL: client.user.displayAvatarURL() })
             .setDescription(aiContent)
-            .setFooter({ text: `Infinite AI Power via ${HF_MODEL.split('/')[1]}` })
+            .setFooter({ text: 'Powered by Mistral AI (Infinite Web Search 2026)' })
             .setTimestamp();
 
         await message.reply({ embeds: [embed] });
 
     } catch (error) {
-        console.error("AI Error:", error.response ? error.response.data : error.message);
-        message.reply("يا غالي، السيرفر عليه ضغط بسيط، جرب تبعت رسالتك كمان مرة هسا! 🔄");
+        console.error("AI Error:", error);
+        if (error.message && error.message.includes("429")) {
+            message.reply("يا غالي، أنا حالياً مضغوط شوي. استنى دقيقة وجرب مرة ثانية! ⏳");
+        } else {
+            message.reply("عذراً، حدث خطأ أثناء معالجة طلبك.");
+        }
     }
 });
 
@@ -134,7 +127,7 @@ passport.use(new DiscordStrategy({
 }));
 
 app.use(session({
-    secret: 'ai-bot-infinite-secret',
+    secret: 'ai-bot-mistral-secret',
     resave: false,
     saveUninitialized: false
 }));
@@ -150,38 +143,44 @@ const dashboardHTML = (user, guilds) => `
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ai bot Dashboard (Infinite)</title>
+    <title>Ai bot Dashboard (Mistral)</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
-        body { background-color: #0f0f1a; color: #fff; font-family: 'Cairo', sans-serif; margin: 0; }
-        .container { max-width: 900px; margin: 50px auto; padding: 30px; background: #1a1a2e; border-radius: 20px; border: 1px solid #7289da; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        h1 { color: #7289da; text-align: center; }
-        .form-group { margin-bottom: 25px; }
-        label { display: block; margin-bottom: 10px; color: #b9bbbe; }
-        input, select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #23272a; background: #2f3136; color: #fff; outline: none; }
-        .btn { width: 100%; padding: 15px; background: #7289da; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 16px; transition: 0.3s; }
-        .btn:hover { background: #5b6eae; }
+        body { background-color: #0a0a0a; color: #fff; font-family: 'Cairo', sans-serif; margin: 0; }
+        .container { max-width: 900px; margin: 50px auto; padding: 30px; background: #1a1a1a; border-radius: 20px; border: 2px solid #f36d00; box-shadow: 0 0 40px rgba(243, 109, 0, 0.3); }
+        h1 { color: #f36d00; text-align: center; text-transform: uppercase; }
+        .user-info { display: flex; align-items: center; justify-content: center; margin-bottom: 30px; }
+        .user-info img { border-radius: 50%; border: 2px solid #f36d00; margin-left: 15px; width: 60px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; color: #ff9d4d; font-weight: bold; }
+        select, input { width: 100%; padding: 12px; background: #222; border: 1px solid #444; color: #fff; border-radius: 8px; outline: none; }
+        .btn { display: block; width: 100%; padding: 15px; background: #f36d00; color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn:hover { background: #ff8533; transform: scale(1.02); }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>إعدادات البوت اللانهائي 🚀</h1>
-        <div style="text-align: center; margin-bottom: 20px;">مرحباً، ${user.username}</div>
+        <h1>Ai bot Dashboard (2026)</h1>
+        <div class="user-info">
+            <span>مرحباً، ${user.username}</span>
+            <img src="https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png" alt="Avatar">
+        </div>
         <form action="/settings" method="POST">
             <div class="form-group">
-                <label>اختر السيرفر</label>
+                <label>تحديد السيرفر</label>
                 <select name="guildId">${guilds.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}</select>
             </div>
             <div class="form-group">
-                <label>معرف الرومات (ID)</label>
+                <label>الرومات المسموحة (IDs)</label>
                 <input type="text" name="allowedChannels" value="${botSettings.allowedChannels.join(',')}">
             </div>
             <div class="form-group">
-                <label>معرف الرتب (ID)</label>
+                <label>الرتب المسموحة (IDs)</label>
                 <input type="text" name="allowedRoles" value="${botSettings.allowedRoles.join(',')}">
             </div>
             <button type="submit" class="btn">حفظ الإعدادات</button>
         </form>
+        <div style="margin-top: 30px; text-align: center;"><a href="/logout" style="color: #666; text-decoration: none;">تسجيل الخروج</a></div>
     </div>
 </body>
 </html>
@@ -189,15 +188,15 @@ const dashboardHTML = (user, guilds) => `
 
 app.get('/', (req, res) => {
     if (req.isAuthenticated()) return res.redirect('/dashboard');
-    res.send(`<html><body style="background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;"><div style="text-align:center;border:1px solid #7289da;padding:50px;border-radius:20px;"><h1>Ai bot Infinite</h1><a href="/login" style="background:#7289da;color:#fff;padding:15px 30px;text-decoration:none;border-radius:5px;font-weight:bold;">Login with Discord</a></div></body></html>`);
+    res.send(`<html><body style="background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;"><div style="text-align:center;border:2px solid #f36d00;padding:50px;border-radius:20px;"><h1>Ai bot Mistral</h1><a href="/login" style="background:#f36d00;color:#fff;padding:15px 30px;text-decoration:none;border-radius:5px;font-weight:bold;">Login with Discord</a></div></body></html>`);
 });
 
 app.get('/login', passport.authenticate('discord'));
 
-// FIX: Added both routes to support any Callback URL configuration
-const callbackHandler = passport.authenticate('discord', { failureRedirect: '/' });
-app.get('/callback', callbackHandler, (req, res) => res.redirect('/dashboard'));
-app.get('/auth/discord/callback', callbackHandler, (req, res) => res.redirect('/dashboard'));
+// SUPPORT BOTH CALLBACK URLS
+const callbackAuth = passport.authenticate('discord', { failureRedirect: '/' });
+app.get('/callback', callbackAuth, (req, res) => res.redirect('/dashboard'));
+app.get('/auth/discord/callback', callbackAuth, (req, res) => res.redirect('/dashboard'));
 
 app.get('/dashboard', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/');
