@@ -11,12 +11,11 @@ const path = require('path');
  */
 const PORT = process.env.PORT || 3000;
 
-// Validate essential environment variables for Render/Production
-const requiredEnvVars = ['DISCORD_TOKEN', 'GROQ_API_KEY', 'CLIENT_ID', 'CLIENT_SECRET', 'CALLBACK_URL'];
+// Validate essential environment variables
+const requiredEnvVars = ['DISCORD_TOKEN', 'HF_TOKEN', 'CLIENT_ID', 'CLIENT_SECRET', 'CALLBACK_URL'];
 requiredEnvVars.forEach(envVar => {
     if (!process.env[envVar]) {
         console.error(`Error: Missing environment variable: ${envVar}`);
-        // We don't exit here to allow the process to start, but it will fail when used
     }
 });
 
@@ -31,16 +30,19 @@ const client = new Client({
 
 const app = express();
 
-// Groq Configuration
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-// Updated to a more advanced model with broader capabilities and more recent knowledge
-const GROQ_MODEL = "groq/compound"; // Using Groq Compound for web search and code execution capabilities
+/**
+ * MODEL SELECTION: Qwen/Qwen2.5-72B-Instruct
+ * One of the most powerful open-source models in 2026.
+ * Hugging Face provides massive free inference limits for this model.
+ */
+const HF_MODEL = "Qwen/Qwen2.5-72B-Instruct";
+const HF_TOKEN = process.env.HF_TOKEN;
 
 // In-memory Database
 let botSettings = {
     allowedRoles: [],
     allowedChannels: [],
-    themeColor: "#ff0000",
+    themeColor: "#7289da", // Discord Blurple for a clean look
     prefix: "!"
 };
 
@@ -51,7 +53,7 @@ const userMemory = new Map();
  * DISCORD BOT LOGIC
  */
 client.on('ready', () => {
-    console.log(`Logged in as ${client.user.tag}!`);
+    console.log(`Logged in as ${client.user.tag}! (Hugging Face Infinite Edition)`);
 });
 
 client.on('messageCreate', async (message) => {
@@ -67,26 +69,31 @@ client.on('messageCreate', async (message) => {
 
         // Get or Initialize User History
         let history = userMemory.get(message.author.id) || [
-            { role: "system", content: "You are 'Ai bot', a highly advanced AI assistant. Respond naturally in the same language as the user (Arabic for Arabic, English for English). Use emojis to make the conversation lively. You know the latest news and can perform web searches and code execution if needed. IMPORTANT: Provide ONLY the text of your response. DO NOT wrap it in any code blocks, tags, or embed syntax. Just plain, beautiful text." }
+            { role: "system", content: "You are 'Ai bot', a 2026 updated AI. You are highly intelligent, respond in the user's language (Arabic/English), and provide real-time information. Use emojis. Respond in plain text only." }
         ];
 
-        // Add current user message to history
         history.push({ role: "user", content: message.content });
 
-        // Limit history to last 20 messages to keep context efficient (System + 20 messages)
-        if (history.length > 21) {
-            history = [history[0], ...history.slice(-20)];
+        // Hugging Face handles large context well, but we keep it efficient at 15 messages
+        if (history.length > 16) {
+            history = [history[0], ...history.slice(-15)];
         }
 
-        const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-            model: GROQ_MODEL,
-            messages: history
-        }, {
-            headers: {
-                'Authorization': `Bearer ${GROQ_API_KEY}`,
-                'Content-Type': 'application/json'
+        const response = await axios.post(
+            `https://api-inference.huggingface.co/models/${HF_MODEL}/v1/chat/completions`,
+            {
+                model: HF_MODEL,
+                messages: history,
+                max_tokens: 1500,
+                temperature: 0.7
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${HF_TOKEN}`,
+                    'Content-Type': 'application/json'
+                }
             }
-        });
+        );
 
         const aiContent = response.data.choices[0].message.content;
 
@@ -98,14 +105,14 @@ client.on('messageCreate', async (message) => {
             .setColor(botSettings.themeColor)
             .setAuthor({ name: 'Ai bot', iconURL: client.user.displayAvatarURL() })
             .setDescription(aiContent)
-            .setFooter({ text: `Powered by Groq ${GROQ_MODEL}` })
+            .setFooter({ text: `Infinite AI Power via ${HF_MODEL.split('/')[1]}` })
             .setTimestamp();
 
         await message.reply({ embeds: [embed] });
 
     } catch (error) {
         console.error("AI Error:", error.response ? error.response.data : error.message);
-        message.reply("عذراً، حدث خطأ أثناء معالجة طلبك.");
+        message.reply("يا غالي، السيرفر عليه ضغط بسيط، جرب تبعت رسالتك كمان مرة هسا! 🔄");
     }
 });
 
@@ -127,7 +134,7 @@ passport.use(new DiscordStrategy({
 }));
 
 app.use(session({
-    secret: 'ai-bot-secret-key',
+    secret: 'ai-bot-infinite-secret',
     resave: false,
     saveUninitialized: false
 }));
@@ -143,49 +150,38 @@ const dashboardHTML = (user, guilds) => `
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ai bot Dashboard</title>
+    <title>Ai bot Dashboard (Infinite)</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
-        body { background-color: #0a0a0a; color: #fff; font-family: 'Cairo', sans-serif; margin: 0; overflow-x: hidden; }
-        .fire-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at bottom, #440000 0%, #000 70%); z-index: -1; animation: pulse 5s infinite alternate; }
-        @keyframes pulse { 0% { opacity: 0.6; } 100% { opacity: 1; } }
-        .container { max-width: 1000px; margin: 50px auto; padding: 20px; background: rgba(20, 20, 20, 0.9); border: 2px solid #ff0000; border-radius: 15px; box-shadow: 0 0 30px #ff000055; animation: fadeIn 1s ease-in; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        h1 { color: #ff0000; text-align: center; text-transform: uppercase; letter-spacing: 2px; }
-        .user-info { display: flex; align-items: center; justify-content: center; margin-bottom: 30px; }
-        .user-info img { border-radius: 50%; border: 2px solid #ff0000; margin-left: 15px; width: 60px; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; color: #ff4444; font-weight: bold; }
-        select, input { width: 100%; padding: 12px; background: #1a1a1a; border: 1px solid #440000; color: #fff; border-radius: 5px; outline: none; transition: 0.3s; }
-        select:focus, input:focus { border-color: #ff0000; box-shadow: 0 0 10px #ff0000; }
-        .btn { display: block; width: 100%; padding: 15px; background: #ff0000; color: #fff; text-align: center; text-decoration: none; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; transition: 0.3s; text-transform: uppercase; }
-        .btn:hover { background: #cc0000; box-shadow: 0 0 20px #ff0000; transform: scale(1.02); }
+        body { background-color: #0f0f1a; color: #fff; font-family: 'Cairo', sans-serif; margin: 0; }
+        .container { max-width: 900px; margin: 50px auto; padding: 30px; background: #1a1a2e; border-radius: 20px; border: 1px solid #7289da; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { color: #7289da; text-align: center; }
+        .form-group { margin-bottom: 25px; }
+        label { display: block; margin-bottom: 10px; color: #b9bbbe; }
+        input, select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #23272a; background: #2f3136; color: #fff; outline: none; }
+        .btn { width: 100%; padding: 15px; background: #7289da; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 16px; transition: 0.3s; }
+        .btn:hover { background: #5b6eae; }
     </style>
 </head>
 <body>
-    <div class="fire-bg"></div>
     <div class="container">
-        <h1>Ai bot Dashboard</h1>
-        <div class="user-info">
-            <span>مرحباً، ${user.username}</span>
-            <img src="https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png" alt="Avatar">
-        </div>
+        <h1>إعدادات البوت اللانهائي 🚀</h1>
+        <div style="text-align: center; margin-bottom: 20px;">مرحباً، ${user.username}</div>
         <form action="/settings" method="POST">
             <div class="form-group">
-                <label>تحديد السيرفر النشط</label>
+                <label>اختر السيرفر</label>
                 <select name="guildId">${guilds.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}</select>
             </div>
             <div class="form-group">
-                <label>معرف الرومات المسموحة (فصل بفاصلة)</label>
-                <input type="text" name="allowedChannels" placeholder="ID1, ID2..." value="${botSettings.allowedChannels.join(',')}">
+                <label>معرف الرومات (ID)</label>
+                <input type="text" name="allowedChannels" value="${botSettings.allowedChannels.join(',')}">
             </div>
             <div class="form-group">
-                <label>معرف الرتب المسموحة (فصل بفاصلة)</label>
-                <input type="text" name="allowedRoles" placeholder="RoleID1, RoleID2..." value="${botSettings.allowedRoles.join(',')}">
+                <label>معرف الرتب (ID)</label>
+                <input type="text" name="allowedRoles" value="${botSettings.allowedRoles.join(',')}">
             </div>
-            <button type="submit" class="btn">حفظ الإعدادات النارية</button>
+            <button type="submit" class="btn">حفظ الإعدادات</button>
         </form>
-        <div style="margin-top: 30px; text-align: center;"><a href="/logout" style="color: #666; text-decoration: none;">تسجيل الخروج</a></div>
     </div>
 </body>
 </html>
@@ -193,21 +189,11 @@ const dashboardHTML = (user, guilds) => `
 
 app.get('/', (req, res) => {
     if (req.isAuthenticated()) return res.redirect('/dashboard');
-    res.send(`
-        <html>
-        <head><title>Ai bot Login</title><style>body { background: #000; color: #fff; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }.login-box { text-align: center; border: 2px solid #ff0000; padding: 50px; border-radius: 20px; box-shadow: 0 0 50px #ff0000; }h1 { color: #ff0000; margin-bottom: 30px; }.btn { background: #ff0000; color: #fff; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 1.2rem; transition: 0.3s; }.btn:hover { background: #fff; color: #ff0000; box-shadow: 0 0 20px #fff; }</style></head>
-        <body><div class="login-box"><h1>Ai bot</h1><a href="/login" class="btn">تسجيل الدخول عبر ديسكورد</a></div></body>
-        </html>
-    `);
+    res.send(`<html><body style="background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;"><div style="text-align:center;border:1px solid #7289da;padding:50px;border-radius:20px;"><h1>Ai bot Infinite</h1><a href="/login" style="background:#7289da;color:#fff;padding:15px 30px;text-decoration:none;border-radius:5px;font-weight:bold;">Login with Discord</a></div></body></html>`);
 });
 
 app.get('/login', passport.authenticate('discord'));
-// Support both /callback and /auth/discord/callback
-const callbackAuth = passport.authenticate('discord', { failureRedirect: '/' });
-app.get('/callback', callbackAuth, (req, res) => res.redirect('/dashboard'));
-app.get('/auth/discord/callback', callbackAuth, (req, res) => res.redirect('/dashboard'));
-
-
+app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/dashboard'));
 app.get('/dashboard', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/');
     const adminGuilds = req.user.guilds.filter(g => (g.permissions & 0x8) === 0x8);
