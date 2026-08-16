@@ -12,6 +12,17 @@ const CALLBACK_URL = process.env.CALLBACK_URL || `${BASE_URL || `http://localhos
 const settingsFile = path.join(__dirname, 'settings.json');
 const settings = fs.existsSync(settingsFile) ? JSON.parse(fs.readFileSync(settingsFile, 'utf8')) : {};
 const saveSettings = () => fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
+const memoryFile = path.join(__dirname, 'memory.json');
+const memories = fs.existsSync(memoryFile) ? JSON.parse(fs.readFileSync(memoryFile, 'utf8')) : {};
+const saveMemories = () => fs.writeFileSync(memoryFile, JSON.stringify(memories, null, 2));
+const MAX_MEMORY_MESSAGES = 40;
+const memoryKey = (guildId, userId) => `${guildId}:${userId}`;
+function getMemory(guildId, userId) { return memories[memoryKey(guildId, userId)] || []; }
+function remember(guildId, userId, role, content) {
+  const key = memoryKey(guildId, userId);
+  memories[key] = [...(memories[key] || []), { role, content: String(content).slice(0, 6000), at: new Date().toISOString() }].slice(-MAX_MEMORY_MESSAGES);
+  saveMemories();
+}
 
 if (!process.env.DISCORD_TOKEN) console.warn('Missing DISCORD_TOKEN');
 if (!process.env.CLIENT_ID || !process.env.CLIENT_SECRET) console.warn('Missing Discord OAuth variables');
@@ -106,13 +117,15 @@ async function webSearch(query) {
   try { const r = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, { headers:{'User-Agent':'Mozilla/5.0'} }); const html = await r.text(); return [...html.matchAll(/<a rel="nofollow" class="result__a" href="([^"]+)">([\s\S]*?)<\/a>/g)].slice(0,5).map(m=>`- ${m[2].replace(/<[^>]+>/g,'')} (${m[1]})`).join('\n'); } catch { return ''; }
 }
 
-async function askAI(prompt, context) {
+async function askAI(prompt, context, history) {
   if (!process.env.GROQ_API_KEY) return 'البوت متصل، لكن الدردشة الذكية تحتاج إضافة GROQ_API_KEY في Render.';
   const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
-  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${process.env.GROQ_API_KEY}`}, body:JSON.stringify({ model, temperature:.35, max_tokens:1800, messages:[{role:'system',content:'أنت مساعد Discord عربي ذكي ومحدث. استخدم نتائج البحث المرفقة عند الحاجة، أجب بشكل واضح ومفيد، لا تخترع معلومات، واذكر الروابط المهمة في نهاية الإجابة.'},{role:'user',content:`السؤال:\n${prompt}\n\nنتائج الويب الحديثة:\n${context || 'لم تظهر نتائج إضافية.'}`}] }) });
+  const conversation = (history || []).map(item => `${item.role === 'user' ? 'المستخدم' : 'المساعد'}: ${item.content}`).join('\n');
+  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${process.env.GROQ_API_KEY}`}, body:JSON.stringify({ model, temperature:.35, max_tokens:1800, messages:[{role:'system',content:'أنت مساعد Discord عربي ذكي ومحدث. تذكّر سياق الحوار السابق لهذا المستخدم واستخدمه عندما يكون مفيدًا. استخدم نتائج البحث المرفقة داخليًا عند الحاجة، أجب بشكل واضح ومفيد، لا تخترع معلومات، ولا تعرض روابط أو مصادر أو عناوين URL في الإجابة.'},{role:'user',content:`سجل الحوار السابق:\n${conversation || 'لا يوجد حوار سابق.'}\n\nالسؤال الحالي:\n${prompt}\n\nنتائج الويب الداخلية:\n${context || 'لم تظهر نتائج إضافية.'}`}] }) });
   const data = await r.json();
   if (!r.ok) throw new Error(data.error?.message || `Groq API error ${r.status}`);
-  return data.choices?.[0]?.message?.content || 'لم أستطع توليد إجابة الآن.';
+  const raw = data.choices?.[0]?.message?.content || 'لم أستطع توليد إجابة الآن.';
+  return raw.replace(/\[[^\]]*\]\([^)]*\)/g, match => match.replace(/\([^)]*\)/, '')).replace(/https?:\/\/\S+/gi, '').replace(/(^|\n)\s*(المصادر|المراجع|sources)\s*:?[\s\S]*$/i, '').replace(/[ \t]{2,}/g, ' ').trim();
 }
 
 const aiQueue = [];
@@ -165,10 +178,13 @@ client.on('messageCreate', async message => {
   if (position > 1) await message.reply(`تم وضع سؤالك في الانتظار، ترتيبك الحالي تقريبًا: ${position}.`);
   await message.channel.sendTyping();
   try {
+    const history = getMemory(message.guild.id, message.author.id);
     const answer = await addToAIQueue(async () => {
       const context = await webSearch(prompt);
-      return askAI(prompt, context);
+      return askAI(prompt, context, history);
     });
+    remember(message.guild.id, message.author.id, 'user', prompt);
+    remember(message.guild.id, message.author.id, 'assistant', answer);
     for (const part of answer.match(/.{1,1900}/gs) || ['تعذر تقسيم الإجابة']) await message.reply(part);
   } catch (e) {
     console.error(e);
