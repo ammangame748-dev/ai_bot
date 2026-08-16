@@ -15,7 +15,7 @@ const saveSettings = () => fs.writeFileSync(settingsFile, JSON.stringify(setting
 
 if (!process.env.DISCORD_TOKEN) console.warn('Missing DISCORD_TOKEN');
 if (!process.env.CLIENT_ID || !process.env.CLIENT_SECRET) console.warn('Missing Discord OAuth variables');
-if (!process.env.GEMINI_API_KEY) console.warn('Missing GEMINI_API_KEY');
+if (!process.env.GROQ_API_KEY) console.warn('Missing GROQ_API_KEY');
 
 const client = new Client({
   intents: [
@@ -79,13 +79,19 @@ app.get('/', requireLogin, (req, res) => {
   const manageable = (req.session.guilds || []).filter(g => (BigInt(g.permissions || 0) & BigInt(PermissionsBitField.Flags.ManageGuild)) !== 0n);
   const selectedGuild = manageable.find(g => settings[g.id])?.id || '';
   const guildOptions = manageable.length ? manageable.map(g => `<option value="${esc(g.id)}">${esc(g.name)}</option>`).join('') : '<option>لا توجد سيرفرات قابلة للإدارة</option>';
-  const guildCards = manageable.length ? manageable.map(g => `<button type="button" class="server-card ${selectedGuild === g.id ? 'active' : ''}" data-guild="${esc(g.id)}"><span class="server-logo">${esc((g.name || 'S')[0].toUpperCase())}</span><strong>${esc(g.name)}</strong><small>${selectedGuild === g.id ? 'محدد حاليًا' : 'اضغط لاختيار هذا السيرفر'}</small></button>`).join('') : '<div class="empty">لا توجد سيرفرات تملك صلاحية إدارتها أو لم يتم تثبيت البوت فيها.</div>';
-  const body = `<nav class="nav"><div class="brand">Nebula <span>AI</span></div><div class="user"><div class="avatar">${esc((req.session.user.username || 'U')[0].toUpperCase())}</div><span>${esc(req.session.user.username)}</span><a class="logout" href="/logout">خروج</a></div></nav><main class="wrap"><section class="hero"><div class="eyebrow">DISCORD AI ASSISTANT</div><h1>مرحبًا بك، ${esc(req.session.user.global_name || req.session.user.username)}</h1><p>تحكم بمكان الدردشة، ودع البوت يجيب بذكاء مع معلومات من الويب عند الحاجة.</p></section><div class="notice"><span class="status"><i class="dot"></i> ${client.isReady() ? 'البوت متصل ويعمل' : 'البوت يتصل الآن'}</span> — لا تضع مفاتيحك السرية داخل الكود، استخدم Environment Variables في Render.</div><section class="card"><h2>اختر السيرفر</h2><p>بعد تسجيل الدخول، اختر السيرفر الذي تريد تشغيل بوت الدردشة فيه. ستظهر فقط السيرفرات التي تملك صلاحية إدارتها.</p><div class="server-grid">${guildCards}</div><form method="post" action="/settings" id="channelForm"><input type="hidden" name="guildId" id="guildId" value=""><select class="select" name="channelId" id="channelId" required disabled><option value="">اختر السيرفر أولًا</option></select><button class="button" id="saveBtn" disabled>حفظ روم الدردشة</button></form></section><section class="grid"><article class="card"><h2>حالة النظام</h2><p>يستمع البوت للرسائل في الروم المحدد فقط، ولا يرد على نفسه أو على الرومات الأخرى.</p><div class="hint">البحث بالويب: ${process.env.WEB_SEARCH_ENABLED === 'false' ? 'متوقف' : 'مفعّل'}<br>نموذج الذكاء: ${esc(process.env.GEMINI_MODEL || 'Gemini Flash')}<br>الاستضافة: Render</div></article></section><div class="footer">Nebula AI · لوحة تحكم Discord</div></main><script>const cards=[...document.querySelectorAll('.server-card')],guildInput=document.querySelector('#guildId'),channel=document.querySelector('#channelId'),save=document.querySelector('#saveBtn');async function choose(card){cards.forEach(x=>x.classList.remove('active'));card.classList.add('active');guildInput.value=card.dataset.guild;channel.disabled=true;save.disabled=true;channel.innerHTML='<option>جار تحميل الرومات...</option>';try{const r=await fetch('/api/channels/'+card.dataset.guild);const d=await r.json();channel.innerHTML=d.map(x=>'<option value="'+x.id+'">'+x.name+'</option>').join('')||'<option value="">لا يوجد روم نصي متاح</option>';channel.disabled=!d.length;save.disabled=!d.length}catch(e){channel.innerHTML='<option value="">تعذر تحميل الرومات</option>'}}cards.forEach(card=>card.addEventListener('click',()=>choose(card)));</script>`;
+  const guildCards = manageable.length ? manageable.map(g => { const installed = client.guilds.cache.has(g.id); return `<button type="button" class="server-card ${selectedGuild === g.id ? 'active' : ''} ${installed ? '' : 'not-installed'}" data-guild="${esc(g.id)}" data-installed="${installed}"><span class="server-logo">${esc((g.name || 'S')[0].toUpperCase())}</span><strong>${esc(g.name)}</strong><small>${installed ? (selectedGuild === g.id ? 'محدد حاليًا · البوت موجود' : 'البوت موجود · اضغط للاختيار') : 'البوت غير مضاف لهذا السيرفر'}</small></button>`; }).join('') : '<div class="empty">لا توجد سيرفرات تملك صلاحية إدارتها.</div>';
+  const body = `<nav class="nav"><div class="brand">Nebula <span>AI</span></div><div class="user"><div class="avatar">${esc((req.session.user.username || 'U')[0].toUpperCase())}</div><span>${esc(req.session.user.username)}</span><a class="logout" href="/logout">خروج</a></div></nav><main class="wrap"><section class="hero"><div class="eyebrow">DISCORD AI ASSISTANT</div><h1>مرحبًا بك، ${esc(req.session.user.global_name || req.session.user.username)}</h1><p>تحكم بمكان الدردشة، ودع البوت يجيب بذكاء مع معلومات من الويب عند الحاجة.</p></section><div class="notice"><span class="status"><i class="dot"></i> ${client.isReady() ? 'البوت متصل ويعمل' : 'البوت يتصل الآن'}</span> — لا تضع مفاتيحك السرية داخل الكود، استخدم Environment Variables في Render.</div><section class="card"><h2>اختر السيرفر</h2><p>بعد تسجيل الدخول، اختر السيرفر الذي تريد تشغيل بوت الدردشة فيه. ستظهر فقط السيرفرات التي تملك صلاحية إدارتها.</p><div class="server-grid">${guildCards}</div><form method="post" action="/settings" id="channelForm"><input type="hidden" name="guildId" id="guildId" value=""><select class="select" name="channelId" id="channelId" required disabled><option value="">اختر السيرفر أولًا</option></select><button class="button" id="saveBtn" disabled>حفظ روم الدردشة</button></form></section><section class="grid"><article class="card"><h2>حالة النظام</h2><p>يستمع البوت للرسائل في الروم المحدد فقط، ولا يرد على نفسه أو على الرومات الأخرى.</p><div class="hint">البحث بالويب: ${process.env.WEB_SEARCH_ENABLED === 'false' ? 'متوقف' : 'مفعّل'}<br>نموذج الذكاء: ${esc(process.env.GROQ_MODEL || 'Llama 3.3 70B')}<br>الاستضافة: Render</div></article></section><div class="footer">Nebula AI · لوحة تحكم Discord</div></main><script>const cards=[...document.querySelectorAll('.server-card')],guildInput=document.querySelector('#guildId'),channel=document.querySelector('#channelId'),save=document.querySelector('#saveBtn');async function choose(card){cards.forEach(x=>x.classList.remove('active'));card.classList.add('active');guildInput.value=card.dataset.guild;channel.disabled=true;save.disabled=true;channel.innerHTML='<option>جار تحميل الرومات...</option>';try{if(card.dataset.installed !== 'true'){channel.innerHTML='<option value="">أضف البوت إلى هذا السيرفر أولًا</option>';return}const r=await fetch('/api/channels/'+card.dataset.guild);const result=await r.json();const d=result.channels || [];channel.innerHTML=d.map(x=>'<option value="'+x.id+'">'+x.name+'</option>').join('')||'<option value="">'+(result.message || 'لا توجد رومات يمكن للبوت رؤيتها')+'</option>';channel.disabled=!d.length;save.disabled=!d.length}catch(e){channel.innerHTML='<option value="">تعذر تحميل الرومات أو صلاحيات البوت ناقصة</option>'}}cards.forEach(card=>card.addEventListener('click',()=>choose(card)));</script>`;
   res.send(layout('لوحة التحكم', body, req.session.user));
 });
 
 app.get('/api/channels/:guildId', requireLogin, async (req, res) => {
-  try { const guild = await client.guilds.fetch(req.params.guildId); const channels = await guild.channels.fetch(); res.json(channels.filter(c => c && c.isTextBased() && c.guild && c.viewable).map(c => ({ id:c.id, name:'# '+c.name })).sort((a,b)=>a.name.localeCompare(b.name))); } catch { res.status(403).json([]); }
+  try {
+    if (!client.guilds.cache.has(req.params.guildId)) return res.status(404).json({ channels: [], message: 'البوت غير موجود في هذا السيرفر. أضف البوت أولًا ثم أعد تحميل الصفحة.' });
+    const guild = await client.guilds.fetch(req.params.guildId);
+    const channels = await guild.channels.fetch();
+    const visible = channels.filter(c => c && c.isTextBased() && c.guild && c.viewable).map(c => ({ id:c.id, name:'# '+c.name })).sort((a,b)=>a.name.localeCompare(b.name));
+    res.json({ channels: visible, message: visible.length ? '' : 'البوت موجود، لكنه لا يملك View Channel. أعطه View Channel وSend Messages.' });
+  } catch { res.status(403).json({ channels: [], message: 'تعذر الوصول إلى رومات السيرفر. تحقق من صلاحيات البوت.' }); }
 });
 
 app.post('/settings', requireLogin, (req, res) => {
@@ -101,22 +107,75 @@ async function webSearch(query) {
 }
 
 async function askAI(prompt, context) {
-  if (!process.env.GEMINI_API_KEY) return 'البوت متصل، لكن الدردشة الذكية تحتاج إضافة GEMINI_API_KEY في Render.';
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(process.env.GEMINI_API_KEY)}`;
-  const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ contents:[{ role:'user', parts:[{ text:`أنت مساعد Discord عربي ذكي ومحدث. أجب بشكل واضح ومفيد، واستخدم نتائج البحث المرفقة عند الحاجة. لا تخترع معلومات، واذكر الروابط المهمة في نهاية الإجابة.\n\nالسؤال:\n${prompt}\n\nنتائج الويب الحديثة:\n${context || 'لم تظهر نتائج إضافية.'}` }] }], generationConfig:{ temperature:.35, maxOutputTokens:1800 } }) });
+  if (!process.env.GROQ_API_KEY) return 'البوت متصل، لكن الدردشة الذكية تحتاج إضافة GROQ_API_KEY في Render.';
+  const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${process.env.GROQ_API_KEY}`}, body:JSON.stringify({ model, temperature:.35, max_tokens:1800, messages:[{role:'system',content:'أنت مساعد Discord عربي ذكي ومحدث. استخدم نتائج البحث المرفقة عند الحاجة، أجب بشكل واضح ومفيد، لا تخترع معلومات، واذكر الروابط المهمة في نهاية الإجابة.'},{role:'user',content:`السؤال:\n${prompt}\n\nنتائج الويب الحديثة:\n${context || 'لم تظهر نتائج إضافية.'}`}] }) });
   const data = await r.json();
-  if (!r.ok) throw new Error(data.error?.message || 'Gemini API error');
-  return data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || 'لم أستطع توليد إجابة الآن.';
+  if (!r.ok) throw new Error(data.error?.message || `Groq API error ${r.status}`);
+  return data.choices?.[0]?.message?.content || 'لم أستطع توليد إجابة الآن.';
+}
+
+const aiQueue = [];
+let queueRunning = false;
+let lastAIRequestAt = 0;
+const lastUserRequestAt = new Map();
+const AI_INTERVAL_MS = 4000; // safe pacing for the free provider; adjust if your Groq dashboard shows a different RPM
+const USER_COOLDOWN_MS = 8000;
+const MAX_QUEUE_SIZE = 60;
+
+function addToAIQueue(task) {
+  return new Promise((resolve, reject) => {
+    if (aiQueue.length >= MAX_QUEUE_SIZE) return reject(new Error('QUEUE_FULL'));
+    aiQueue.push({ task, resolve, reject });
+    processAIQueue();
+  });
+}
+
+async function processAIQueue() {
+  if (queueRunning) return;
+  queueRunning = true;
+  while (aiQueue.length) {
+    const item = aiQueue.shift();
+    const wait = Math.max(0, AI_INTERVAL_MS - (Date.now() - lastAIRequestAt));
+    if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+    try {
+      lastAIRequestAt = Date.now();
+      item.resolve(await item.task());
+    } catch (error) {
+      item.reject(error);
+    }
+  }
+  queueRunning = false;
 }
 
 client.on('ready', () => console.log(`Logged in as ${client.user.tag}`));
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
   if (settings[message.guild.id] !== message.channel.id) return;
-  if (!message.content.trim()) return;
+  const prompt = message.content.trim();
+  if (!prompt) return;
+  const now = Date.now();
+  const previous = lastUserRequestAt.get(message.author.id) || 0;
+  if (now - previous < USER_COOLDOWN_MS) {
+    return message.reply('استنى شوي بين كل سؤال وسؤال حتى ما نستهلك حد الـAPI بسرعة.');
+  }
+  lastUserRequestAt.set(message.author.id, now);
+  if (aiQueue.length >= MAX_QUEUE_SIZE) return message.reply('الطلب كبير حاليًا. جرّب بعد دقيقة.');
+  const position = aiQueue.length + 1;
+  if (position > 1) await message.reply(`تم وضع سؤالك في الانتظار، ترتيبك الحالي تقريبًا: ${position}.`);
   await message.channel.sendTyping();
-  try { const context = await webSearch(message.content); const answer = await askAI(message.content, context); for (const part of answer.match(/.{1,1900}/gs) || ['تعذر تقسيم الإجابة']) await message.reply(part); } catch (e) { console.error(e); message.reply('حدث خطأ مؤقت. حاول مرة ثانية بعد قليل.'); }
+  try {
+    const answer = await addToAIQueue(async () => {
+      const context = await webSearch(prompt);
+      return askAI(prompt, context);
+    });
+    for (const part of answer.match(/.{1,1900}/gs) || ['تعذر تقسيم الإجابة']) await message.reply(part);
+  } catch (e) {
+    console.error(e);
+    if (e.message === 'QUEUE_FULL') return message.reply('الطابور ممتلئ مؤقتًا. جرّب بعد دقيقة.');
+    if (e.message.includes('429')) return message.reply('وصلنا حد Groq المؤقت. سيعود البوت تلقائيًا بعد تجدد الحد.');
+    message.reply('حدث خطأ مؤقت. حاول مرة ثانية بعد قليل.');
+  }
 });
 
 app.listen(PORT, () => console.log(`Dashboard listening on port ${PORT}`));
