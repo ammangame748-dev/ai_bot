@@ -132,7 +132,7 @@ const aiQueue = [];
 let queueRunning = false;
 let lastAIRequestAt = 0;
 const lastUserRequestAt = new Map();
-const AI_INTERVAL_MS = 4000; // safe pacing for the free provider; adjust if your Groq dashboard shows a different RPM
+const AI_INTERVAL_MS = 0; // no artificial delay; Groq enforces its own rate limits
 const USER_COOLDOWN_MS = 8000;
 const MAX_QUEUE_SIZE = 60;
 
@@ -169,9 +169,7 @@ client.on('messageCreate', async message => {
   if (!prompt) return;
   const now = Date.now();
   const previous = lastUserRequestAt.get(message.author.id) || 0;
-  if (now - previous < USER_COOLDOWN_MS) {
-    return message.reply('استنى شوي بين كل سؤال وسؤال حتى ما نستهلك حد الـAPI بسرعة.');
-  }
+  if (now - previous < USER_COOLDOWN_MS) return;
   lastUserRequestAt.set(message.author.id, now);
   if (aiQueue.length >= MAX_QUEUE_SIZE) return message.reply('الطلب كبير حاليًا. جرّب بعد دقيقة.');
   const position = aiQueue.length + 1;
